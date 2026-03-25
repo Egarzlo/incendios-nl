@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predicción de Incendios — Nuevo León</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f0; color: #2c2c2a; }
+        .header { background: #1A7A6E; color: white; padding: 1.5rem 2rem; }
+        .header h1 { font-size: 1.5rem; font-weight: 500; }
+        .header p { font-size: 0.875rem; opacity: 0.85; margin-top: 0.25rem; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .status { padding: 1rem 1.5rem; border-radius: 8px; background: white; border: 1px solid #e0e0d8; margin-bottom: 1.5rem; }
+        .status.loading { color: #888; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+        .card { background: white; border-radius: 12px; padding: 1.25rem; border: 1px solid #e0e0d8; }
+        .card h3 { font-size: 1rem; font-weight: 500; margin-bottom: 0.5rem; }
+        .card .nivel { font-size: 0.8rem; padding: 0.2rem 0.6rem; border-radius: 4px; display: inline-block; font-weight: 500; }
+        .nivel.BAJO { background: #EAF3DE; color: #27500A; }
+        .nivel.MEDIO { background: #FAEEDA; color: #633806; }
+        .nivel.ALTO { background: #FAECE7; color: #712B13; }
+        .nivel.MUY_ALTO { background: #FCEBEB; color: #791F1F; }
+        .nivel.EXTREMO { background: #501313; color: #F7C1C1; }
+        .card .prob { font-size: 2rem; font-weight: 500; color: #1A7A6E; }
+        .card .detail { font-size: 0.8rem; color: #888; margin-top: 0.5rem; }
+        .footer { text-align: center; padding: 2rem; color: #888; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔥 Sistema de Predicción de Incendios Forestales</h1>
+        <p>Nuevo León — Actualización diaria 6:00 AM</p>
+    </div>
+    <div class="container">
+        <div class="status loading" id="status">Conectando con base de datos...</div>
+        <div class="grid" id="grid"></div>
+    </div>
+    <div class="footer">
+        BIOIMPACT — Consultoría Ambiental | Datos: NASA FIRMS, Open-Meteo, CONAFOR
+    </div>
+
+    <script>
+        // Configurar con tu URL pública de Supabase (anon key, no service role)
+        const SUPABASE_URL = 'TU_SUPABASE_URL';
+        const SUPABASE_ANON_KEY = 'TU_SUPABASE_ANON_KEY';
+
+        async function loadData() {
+            const statusEl = document.getElementById('status');
+            const gridEl = document.getElementById('grid');
+
+            try {
+                const resp = await fetch(
+                    `${SUPABASE_URL}/rest/v1/v_riesgo_actual?order=prob_incendio.desc`,
+                    {
+                        headers: {
+                            'apikey': SUPABASE_ANON_KEY,
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        }
+                    }
+                );
+
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+
+                if (!data.length) {
+                    statusEl.textContent = 'Sin datos disponibles. Ejecuta el ETL primero.';
+                    return;
+                }
+
+                const fecha = data[0].fecha;
+                const alertas = data.filter(d => ['ALTO','MUY_ALTO','EXTREMO'].includes(d.nivel_riesgo));
+                statusEl.innerHTML = `<strong>Última actualización:</strong> ${fecha} — <strong>${alertas.length}</strong> municipios en alerta`;
+                statusEl.classList.remove('loading');
+
+                gridEl.innerHTML = data.map(d => `
+                    <div class="card">
+                        <h3>${d.municipio}</h3>
+                        <span class="nivel ${d.nivel_riesgo}">${d.nivel_riesgo.replace('_', ' ')}</span>
+                        <div class="prob">${(d.prob_incendio * 100).toFixed(0)}%</div>
+                        <div class="detail">
+                            🌡️ ${d.temp_max ?? '—'}°C &nbsp;
+                            💧 ${d.humedad_min ?? '—'}% &nbsp;
+                            💨 ${d.viento_max ?? '—'} km/h &nbsp;
+                            🌧️ ${d.dias_sin_lluvia ?? '—'} días sin lluvia &nbsp;
+                            🔥 ${d.hotspots_24h ?? 0} hotspots
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (err) {
+                statusEl.textContent = `Error: ${err.message}. Configura SUPABASE_URL y ANON_KEY en el código.`;
+                statusEl.style.color = '#A32D2D';
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
