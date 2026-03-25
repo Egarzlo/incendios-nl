@@ -3,98 +3,564 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Predicción de Incendios — Nuevo León</title>
+    <title>Predicción de Incendios Forestales — Nuevo León</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
     <style>
+        :root {
+            --teal: #1A7A6E;
+            --teal-light: #E1F5EE;
+            --bg: #f5f5f0;
+            --card: #ffffff;
+            --border: #e0e0d8;
+            --text: #2c2c2a;
+            --text-secondary: #73726c;
+            --bajo: #639922;
+            --bajo-bg: #EAF3DE;
+            --bajo-text: #27500A;
+            --medio: #BA7517;
+            --medio-bg: #FAEEDA;
+            --medio-text: #633806;
+            --alto: #D85A30;
+            --alto-bg: #FAECE7;
+            --alto-text: #712B13;
+            --muy-alto: #E24B4A;
+            --muy-alto-bg: #FCEBEB;
+            --muy-alto-text: #791F1F;
+            --extremo: #501313;
+            --extremo-bg: #501313;
+            --extremo-text: #F7C1C1;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f0; color: #2c2c2a; }
-        .header { background: #1A7A6E; color: white; padding: 1.5rem 2rem; }
-        .header h1 { font-size: 1.5rem; font-weight: 500; }
-        .header p { font-size: 0.875rem; opacity: 0.85; margin-top: 0.25rem; }
-        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
-        .status { padding: 1rem 1.5rem; border-radius: 8px; background: white; border: 1px solid #e0e0d8; margin-bottom: 1.5rem; }
-        .status.loading { color: #888; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
-        .card { background: white; border-radius: 12px; padding: 1.25rem; border: 1px solid #e0e0d8; }
-        .card h3 { font-size: 1rem; font-weight: 500; margin-bottom: 0.5rem; }
-        .card .nivel { font-size: 0.8rem; padding: 0.2rem 0.6rem; border-radius: 4px; display: inline-block; font-weight: 500; }
-        .nivel.BAJO { background: #EAF3DE; color: #27500A; }
-        .nivel.MEDIO { background: #FAEEDA; color: #633806; }
-        .nivel.ALTO { background: #FAECE7; color: #712B13; }
-        .nivel.MUY_ALTO { background: #FCEBEB; color: #791F1F; }
-        .nivel.EXTREMO { background: #501313; color: #F7C1C1; }
-        .card .prob { font-size: 2rem; font-weight: 500; color: #1A7A6E; }
-        .card .detail { font-size: 0.8rem; color: #888; margin-top: 0.5rem; }
-        .footer { text-align: center; padding: 2rem; color: #888; font-size: 0.8rem; }
+        body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+
+        .header {
+            background: var(--teal);
+            color: white;
+            padding: 1.25rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .header h1 { font-size: 1.35rem; font-weight: 500; }
+        .header p { font-size: 0.8rem; opacity: 0.8; }
+        .header-right { text-align: right; }
+        .header-right .fecha { font-size: 0.9rem; font-weight: 500; }
+        .header-right .hora { font-size: 0.75rem; opacity: 0.7; }
+
+        nav {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 0;
+            overflow-x: auto;
+        }
+        nav button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            background: none;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            white-space: nowrap;
+            font-family: inherit;
+        }
+        nav button.active {
+            color: var(--teal);
+            border-bottom-color: var(--teal);
+            font-weight: 500;
+        }
+        nav button:hover { color: var(--text); }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 1.25rem; }
+        .section { display: none; }
+        .section.active { display: block; }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+        .stat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .stat-card .number { font-size: 1.8rem; font-weight: 500; }
+        .stat-card .label { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; }
+
+        .map-container {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 1.25rem;
+        }
+        #map { height: 500px; width: 100%; }
+
+        .legend {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 0.75rem;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: border-color 0.2s;
+            cursor: default;
+        }
+        .card:hover { border-color: #bbb; }
+        .card .prob-circle {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+        .card .info { flex: 1; min-width: 0; }
+        .card .muni-name { font-size: 0.95rem; font-weight: 500; }
+        .card .nivel-badge {
+            font-size: 0.7rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+            display: inline-block;
+            font-weight: 500;
+            margin-top: 0.2rem;
+        }
+        .card .detail-row {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.4rem;
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .card .detail-row span { white-space: nowrap; }
+
+        .filter-bar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filter-bar label { font-size: 0.8rem; color: var(--text-secondary); }
+        .filter-bar select, .filter-bar input {
+            padding: 0.4rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-family: inherit;
+            background: var(--card);
+        }
+
+        .metodologia { max-width: 900px; }
+        .metodologia h2 { font-size: 1.2rem; font-weight: 500; margin: 1.5rem 0 0.75rem; color: var(--teal); }
+        .metodologia h2:first-child { margin-top: 0; }
+        .metodologia h3 { font-size: 1rem; font-weight: 500; margin: 1.25rem 0 0.5rem; }
+        .metodologia p { font-size: 0.9rem; line-height: 1.7; margin-bottom: 0.75rem; color: var(--text); }
+        .metodologia table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.8rem;
+        }
+        .metodologia th, .metodologia td {
+            padding: 0.6rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .metodologia th { background: var(--teal-light); color: var(--teal); font-weight: 500; }
+        .metodologia .highlight-box {
+            background: var(--teal-light);
+            border-left: 3px solid var(--teal);
+            padding: 1rem 1.25rem;
+            border-radius: 0 8px 8px 0;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            border-top: 1px solid var(--border);
+            margin-top: 2rem;
+        }
+
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .header { padding: 1rem; }
+            .header h1 { font-size: 1.1rem; }
+            #map { height: 350px; }
+            .grid { grid-template-columns: 1fr; }
+            .stats-row { grid-template-columns: repeat(3, 1fr); }
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🔥 Sistema de Predicción de Incendios Forestales</h1>
-        <p>Nuevo León — Actualización diaria 6:00 AM</p>
+        <div>
+            <h1>Sistema de Prediccion de Incendios Forestales</h1>
+            <p>Nuevo Leon  —  Actualizacion diaria 6:00 AM</p>
+        </div>
+        <div class="header-right">
+            <div class="fecha" id="fecha-display">Cargando...</div>
+            <div class="hora">Proxima actualizacion: 6:00 AM CST</div>
+        </div>
     </div>
+
+    <nav id="nav">
+        <button class="active" onclick="showSection('mapa')">Mapa de riesgo</button>
+        <button onclick="showSection('municipios')">Municipios</button>
+        <button onclick="showSection('metodologia')">Metodologia</button>
+    </nav>
+
     <div class="container">
-        <div class="status loading" id="status">Conectando con base de datos...</div>
-        <div class="grid" id="grid"></div>
+        <div class="section active" id="sec-mapa">
+            <div class="stats-row" id="stats-row">
+                <div class="stat-card"><div class="number" id="stat-total">—</div><div class="label">Municipios evaluados</div></div>
+                <div class="stat-card"><div class="number" style="color:var(--muy-alto)" id="stat-alerta">—</div><div class="label">En alerta</div></div>
+                <div class="stat-card"><div class="number" style="color:var(--alto)" id="stat-hotspots">—</div><div class="label">Hotspots 24h</div></div>
+                <div class="stat-card"><div class="number" style="color:var(--teal)" id="stat-temp">—</div><div class="label">Temp max promedio</div></div>
+                <div class="stat-card"><div class="number" style="color:var(--medio)" id="stat-sequia">—</div><div class="label">Dias sin lluvia (prom)</div></div>
+            </div>
+            <div class="map-container">
+                <div id="map"></div>
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-dot" style="background:var(--bajo)"></div>Bajo</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:var(--medio)"></div>Medio</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:var(--alto)"></div>Alto</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:var(--muy-alto)"></div>Muy alto</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:var(--extremo)"></div>Extremo</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" id="sec-municipios">
+            <div class="filter-bar">
+                <label>Filtrar por nivel:</label>
+                <select id="filter-nivel" onchange="renderCards()">
+                    <option value="TODOS">Todos</option>
+                    <option value="EXTREMO">Extremo</option>
+                    <option value="MUY_ALTO">Muy alto</option>
+                    <option value="ALTO">Alto</option>
+                    <option value="MEDIO">Medio</option>
+                    <option value="BAJO">Bajo</option>
+                </select>
+                <label>Buscar:</label>
+                <input type="text" id="filter-search" placeholder="Nombre del municipio..." oninput="renderCards()"/>
+            </div>
+            <div class="grid" id="grid"></div>
+        </div>
+
+        <div class="section metodologia" id="sec-metodologia">
+            <h2>Fundamento del modelo</h2>
+            <p>La ocurrencia y propagacion de un incendio forestal depende de la convergencia simultanea de tres factores conocidos como el "triangulo del fuego": combustible disponible, condiciones atmosfericas favorables y una fuente de ignicion. El modelo traduce cada uno de estos factores en variables cuantificables que se obtienen diariamente de fuentes satelitales y meteorologicas.</p>
+
+            <div class="highlight-box">
+                El sistema evalua diariamente la probabilidad de incendio en cada uno de los 51 municipios del estado, integrando datos satelitales de la NASA, variables meteorologicas en tiempo casi-real y caracteristicas geograficas del territorio.
+            </div>
+
+            <h3>1. Disponibilidad y sequedad del combustible (35% del indice)</h3>
+            <p>La vegetacion muerta y viva en el suelo forestal constituye el combustible. Su capacidad de arder depende directamente de su contenido de humedad, controlado por dos procesos opuestos: la precipitacion que lo humedece y la evapotranspiracion que lo seca.</p>
+            <p><strong>Dias acumulados sin precipitacion significativa</strong> es la variable mas predictiva del modelo. Cuando este indicador supera los 7 dias, el combustible fino (hojarasca, pastos secos, ramas menores a 6 mm) pierde la mayor parte de su humedad. A partir de los 14 dias sin lluvia, incluso el combustible grueso alcanza niveles criticos de sequedad.</p>
+            <p>La <strong>evapotranspiracion de referencia (ET&#8320;)</strong> cuantifica la demanda evaporativa de la atmosfera: cuanta agua extrae el ambiente de la vegetacion y el suelo. Valores altos indican que la atmosfera esta "secando" activamente el combustible.</p>
+
+            <h3>2. Condiciones meteorologicas de propagacion (55% del indice)</h3>
+            <p>Una vez que el combustible esta seco, las condiciones atmosfericas determinan si un fuego incipiente se extingue o se propaga de manera descontrolada.</p>
+            <p><strong>Temperatura maxima:</strong> por encima de 35°C, precalienta el combustible y crea corrientes convectivas que alimentan el avance del fuego. Nuevo Leon registra temperaturas superiores a 40°C durante los picos de marzo-mayo.</p>
+            <p><strong>Humedad relativa minima:</strong> por debajo del 25%, la atmosfera deshidrata activamente el combustible. Humedades menores al 15% representan condiciones criticas donde cualquier fuente de ignicion tiene alta probabilidad de generar un incendio sostenido.</p>
+            <p><strong>Velocidad maxima del viento:</strong> aporta oxigeno al frente de fuego y transporta pavesas a distancias de cientos de metros, generando focos secundarios. Vientos superiores a 30 km/h transforman un incendio manejable en uno potencialmente catastrofico.</p>
+            <p>La interaccion entre estas tres variables es <strong>multiplicativa, no aditiva</strong>: un dia con 38°C, 12% de humedad y vientos de 40 km/h es exponencialmente mas peligroso que uno con solo temperatura alta.</p>
+
+            <h3>3. Deteccion de fuego activo (10% del indice)</h3>
+            <p>Los sensores VIIRS a bordo de los satelites NOAA-20 y Suomi-NPP de la NASA detectan anomalias termicas con resolucion de 375 metros. Cada "hotspot" indica la probable presencia de fuego activo. La presencia de hotspots en un municipio eleva automaticamente su riesgo, y hotspots en municipios vecinos señalan que las condiciones regionales ya estan produciendo incendios.</p>
+
+            <h2>Calculo del indice de riesgo</h2>
+            <table>
+                <thead>
+                    <tr><th>Factor</th><th>Peso</th><th>Variable</th><th>Umbrales</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Sequedad del combustible</td><td>35 pts</td><td>Dias sin lluvia</td><td>&#8805;14d = 35 | &#8805;7d = 25 | &#8805;3d = 15</td></tr>
+                    <tr><td>Temperatura extrema</td><td>20 pts</td><td>Temp. maxima</td><td>&#8805;40°C = 20 | &#8805;35 = 15 | &#8805;30 = 10</td></tr>
+                    <tr><td>Deficit de humedad</td><td>20 pts</td><td>Humedad min.</td><td>&#8804;15% = 20 | &#8804;25 = 15 | &#8804;40 = 10</td></tr>
+                    <tr><td>Potencial de propagacion</td><td>15 pts</td><td>Viento max.</td><td>&#8805;50km/h = 15 | &#8805;30 = 10 | &#8805;15 = 5</td></tr>
+                    <tr><td>Fuego activo</td><td>10 pts</td><td>Hotspots 24h</td><td>&#8805;3 = 10 | &#8805;1 = 7</td></tr>
+                </tbody>
+            </table>
+
+            <h2>Niveles de riesgo</h2>
+            <table>
+                <thead>
+                    <tr><th>Nivel</th><th>Probabilidad</th><th>Accion recomendada</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><span class="nivel-badge" style="background:var(--bajo-bg);color:var(--bajo-text)">BAJO</span></td><td>0 – 19%</td><td>Monitoreo rutinario</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:var(--medio-bg);color:var(--medio-text)">MEDIO</span></td><td>20 – 39%</td><td>Preparacion de brigadas</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:var(--alto-bg);color:var(--alto-text)">ALTO</span></td><td>40 – 59%</td><td>Alerta a Proteccion Civil, pre-posicionamiento de recursos</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:var(--muy-alto-bg);color:var(--muy-alto-text)">MUY ALTO</span></td><td>60 – 79%</td><td>Activacion de brigadas, restriccion de quemas, vigilancia aerea</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:var(--extremo-bg);color:var(--extremo-text)">EXTREMO</span></td><td>80 – 100%</td><td>Movilizacion interinstitucional, evacuacion preventiva si procede</td></tr>
+                </tbody>
+            </table>
+
+            <h2>Fuentes de datos</h2>
+            <table>
+                <thead>
+                    <tr><th>Fuente</th><th>Datos</th><th>Resolucion</th><th>Frecuencia</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>NASA FIRMS VIIRS</td><td>Hotspots de fuego activo</td><td>375 m</td><td>Cada 3 horas</td></tr>
+                    <tr><td>Open-Meteo</td><td>Temperatura, humedad, viento, precipitacion</td><td>11 km</td><td>Horaria</td></tr>
+                    <tr><td>CONAFOR</td><td>Historico de incendios 2015-2024</td><td>Municipal</td><td>Anual</td></tr>
+                    <tr><td>INEGI</td><td>Uso de suelo, vegetacion, topografia</td><td>1:250,000</td><td>Periodica</td></tr>
+                </tbody>
+            </table>
+
+            <h2>Evolucion prevista</h2>
+            <p>La version actual opera con un modelo basado en reglas ponderadas. Conforme el sistema acumule datos historicos de predicciones versus incendios reales, se entrenara un modelo de aprendizaje automatico (Random Forest o XGBoost) que optimice los pesos con base en los patrones especificos de Nuevo Leon.</p>
+        </div>
     </div>
+
     <div class="footer">
-        BIOIMPACT — Consultoría Ambiental | Datos: NASA FIRMS, Open-Meteo, CONAFOR
+        
+        Datos: NASA FIRMS/LANCE  |  Open-Meteo  |  CONAFOR  |  INEGI
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script>
-        // Configurar con tu URL pública de Supabase (anon key, no service role)
-        const SUPABASE_URL = 'TU_SUPABASE_URL';
-        const SUPABASE_ANON_KEY = 'TU_SUPABASE_ANON_KEY';
+    // ═══════════════════════════════════════════════════════════════
+    // CONFIGURACION — Reemplaza con tus valores de Supabase
+    // ═══════════════════════════════════════════════════════════════
+    const SUPABASE_URL = 'https://rgskntzjsrqbeszeyvwo.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnc2tudHpqc3JxYmVzemV5dndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTAyMzEsImV4cCI6MjA4OTk2NjIzMX0.Bow5fil8hnR2T4mZBHabHKMzzCtI_rejNiCMGCFo4Bg';
 
-        async function loadData() {
-            const statusEl = document.getElementById('status');
-            const gridEl = document.getElementById('grid');
+    // ═══════════════════════════════════════════════════════════════
+    let allData = [];
+    let map;
 
-            try {
-                const resp = await fetch(
-                    `${SUPABASE_URL}/rest/v1/v_riesgo_actual?order=prob_incendio.desc`,
-                    {
-                        headers: {
-                            'apikey': SUPABASE_ANON_KEY,
-                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                        }
-                    }
-                );
+    const NIVEL_COLORS = {
+        BAJO:     { color: '#639922', bg: '#EAF3DE', text: '#27500A' },
+        MEDIO:    { color: '#BA7517', bg: '#FAEEDA', text: '#633806' },
+        ALTO:     { color: '#D85A30', bg: '#FAECE7', text: '#712B13' },
+        MUY_ALTO: { color: '#E24B4A', bg: '#FCEBEB', text: '#791F1F' },
+        EXTREMO:  { color: '#501313', bg: '#501313', text: '#F7C1C1' },
+    };
 
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const data = await resp.json();
+    const NIVEL_RADIUS = { BAJO: 8, MEDIO: 10, ALTO: 13, MUY_ALTO: 16, EXTREMO: 20 };
 
-                if (!data.length) {
-                    statusEl.textContent = 'Sin datos disponibles. Ejecuta el ETL primero.';
-                    return;
-                }
+    function showSection(name) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById('sec-' + name).classList.add('active');
+        event.target.classList.add('active');
+        if (name === 'mapa' && map) map.invalidateSize();
+    }
 
-                const fecha = data[0].fecha;
-                const alertas = data.filter(d => ['ALTO','MUY_ALTO','EXTREMO'].includes(d.nivel_riesgo));
-                statusEl.innerHTML = `<strong>Última actualización:</strong> ${fecha} — <strong>${alertas.length}</strong> municipios en alerta`;
-                statusEl.classList.remove('loading');
+    function initMap() {
+        map = L.map('map', {
+            center: [25.5, -99.9],
+            zoom: 7,
+            zoomControl: true,
+            scrollWheelZoom: true,
+        });
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 18,
+        }).addTo(map);
+    }
 
-                gridEl.innerHTML = data.map(d => `
-                    <div class="card">
-                        <h3>${d.municipio}</h3>
-                        <span class="nivel ${d.nivel_riesgo}">${d.nivel_riesgo.replace('_', ' ')}</span>
-                        <div class="prob">${(d.prob_incendio * 100).toFixed(0)}%</div>
-                        <div class="detail">
-                            🌡️ ${d.temp_max ?? '—'}°C &nbsp;
-                            💧 ${d.humedad_min ?? '—'}% &nbsp;
-                            💨 ${d.viento_max ?? '—'} km/h &nbsp;
-                            🌧️ ${d.dias_sin_lluvia ?? '—'} días sin lluvia &nbsp;
-                            🔥 ${d.hotspots_24h ?? 0} hotspots
+    function plotMarkers(data) {
+        data.forEach(d => {
+            if (!d.lat_centroide || !d.lon_centroide) return;
+            const nivel = d.nivel_riesgo || 'BAJO';
+            const c = NIVEL_COLORS[nivel] || NIVEL_COLORS.BAJO;
+            const r = NIVEL_RADIUS[nivel] || 8;
+            const prob = (d.prob_incendio * 100).toFixed(0);
+
+            const marker = L.circleMarker([d.lat_centroide, d.lon_centroide], {
+                radius: r,
+                fillColor: c.color,
+                color: '#fff',
+                weight: 1.5,
+                fillOpacity: 0.85,
+            }).addTo(map);
+
+            marker.bindPopup(`
+                <div style="font-family:system-ui;min-width:200px">
+                    <div style="font-weight:500;font-size:14px;margin-bottom:4px">${d.municipio}</div>
+                    <span style="background:${c.bg};color:${c.text};padding:2px 8px;border-radius:3px;font-size:12px;font-weight:500">${nivel.replace('_',' ')}</span>
+                    <span style="font-size:20px;font-weight:500;color:${c.color};margin-left:8px">${prob}%</span>
+                    <hr style="margin:8px 0;border:none;border-top:1px solid #e0e0d8"/>
+                    <div style="font-size:12px;color:#73726c;line-height:1.8">
+                        Temp. max: <strong>${d.temp_max ?? '—'}°C</strong><br/>
+                        Humedad min: <strong>${d.humedad_min ?? '—'}%</strong><br/>
+                        Viento max: <strong>${d.viento_max ?? '—'} km/h</strong><br/>
+                        Dias sin lluvia: <strong>${d.dias_sin_lluvia ?? '—'}</strong><br/>
+                        Hotspots 24h: <strong>${d.hotspots_24h ?? 0}</strong>
+                    </div>
+                </div>
+            `);
+
+            marker.bindTooltip(d.municipio, {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -r],
+                className: 'leaflet-tooltip-custom'
+            });
+        });
+    }
+
+    function updateStats(data) {
+        document.getElementById('stat-total').textContent = data.length;
+        const alertas = data.filter(d => ['ALTO','MUY_ALTO','EXTREMO'].includes(d.nivel_riesgo));
+        document.getElementById('stat-alerta').textContent = alertas.length;
+        const totalHotspots = data.reduce((s, d) => s + (d.hotspots_24h || 0), 0);
+        document.getElementById('stat-hotspots').textContent = totalHotspots;
+        const temps = data.filter(d => d.temp_max).map(d => d.temp_max);
+        const avgTemp = temps.length ? (temps.reduce((a,b) => a+b, 0) / temps.length).toFixed(1) : '—';
+        document.getElementById('stat-temp').textContent = avgTemp + '°C';
+        const sequias = data.filter(d => d.dias_sin_lluvia != null).map(d => d.dias_sin_lluvia);
+        const avgSeq = sequias.length ? Math.round(sequias.reduce((a,b) => a+b, 0) / sequias.length) : '—';
+        document.getElementById('stat-sequia').textContent = avgSeq;
+    }
+
+    function renderCards() {
+        const filterNivel = document.getElementById('filter-nivel').value;
+        const filterSearch = document.getElementById('filter-search').value.toLowerCase();
+        const gridEl = document.getElementById('grid');
+
+        let filtered = allData;
+        if (filterNivel !== 'TODOS') filtered = filtered.filter(d => d.nivel_riesgo === filterNivel);
+        if (filterSearch) filtered = filtered.filter(d => d.municipio.toLowerCase().includes(filterSearch));
+
+        gridEl.innerHTML = filtered.map(d => {
+            const nivel = d.nivel_riesgo || 'BAJO';
+            const c = NIVEL_COLORS[nivel] || NIVEL_COLORS.BAJO;
+            const prob = (d.prob_incendio * 100).toFixed(0);
+            return `
+                <div class="card">
+                    <div class="prob-circle" style="background:${c.bg};color:${c.text}">${prob}%</div>
+                    <div class="info">
+                        <div class="muni-name">${d.municipio}</div>
+                        <span class="nivel-badge" style="background:${c.bg};color:${c.text}">${nivel.replace('_', ' ')}</span>
+                        <div class="detail-row">
+                            <span>${d.temp_max ?? '—'}°C</span>
+                            <span>${d.humedad_min ?? '—'}% hum</span>
+                            <span>${d.viento_max ?? '—'} km/h</span>
+                            <span>${d.dias_sin_lluvia ?? '—'}d sin lluvia</span>
+                            <span>${d.hotspots_24h ?? 0} hotspots</span>
                         </div>
                     </div>
-                `).join('');
+                </div>
+            `;
+        }).join('');
+    }
 
-            } catch (err) {
-                statusEl.textContent = `Error: ${err.message}. Configura SUPABASE_URL y ANON_KEY en el código.`;
-                statusEl.style.color = '#A32D2D';
+    async function loadData() {
+        try {
+            const url = `${SUPABASE_URL}/rest/v1/v_riesgo_actual?order=prob_incendio.desc`;
+            const resp = await fetch(url, {
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                }
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (!data.length) {
+                document.getElementById('fecha-display').textContent = 'Sin datos disponibles';
+                return;
             }
-        }
 
-        loadData();
+            allData = data;
+
+            // Need lat/lon for map — fetch from municipios
+            const muniResp = await fetch(`${SUPABASE_URL}/rest/v1/municipios?select=cve_muni,lat_centroide,lon_centroide`, {
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                }
+            });
+            const munis = await muniResp.json();
+            const muniMap = {};
+            munis.forEach(m => muniMap[m.cve_muni] = m);
+
+            allData.forEach(d => {
+                const m = muniMap[d.cve_muni];
+                if (m) {
+                    d.lat_centroide = m.lat_centroide;
+                    d.lon_centroide = m.lon_centroide;
+                }
+            });
+
+            const fecha = data[0].fecha;
+            document.getElementById('fecha-display').textContent = fecha;
+
+            updateStats(allData);
+            plotMarkers(allData);
+            renderCards();
+
+        } catch (err) {
+            document.getElementById('fecha-display').textContent = 'Error de conexion';
+            console.error('Error cargando datos:', err);
+            document.getElementById('stats-row').innerHTML = `
+                <div class="stat-card" style="grid-column:1/-1;color:var(--muy-alto)">
+                    <div class="number" style="font-size:1rem">Error: ${err.message}</div>
+                    <div class="label">Configura SUPABASE_URL y SUPABASE_ANON_KEY en dashboard/index.html</div>
+                </div>
+            `;
+        }
+    }
+
+    initMap();
+    loadData();
     </script>
 </body>
 </html>
