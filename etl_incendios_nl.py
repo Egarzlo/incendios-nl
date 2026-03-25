@@ -71,7 +71,9 @@ class SupabaseClient:
     def insert(self, table: str, rows: list) -> list:
         url = f"{self.url}/rest/v1/{table}"
         r = requests.post(url, headers=self.headers, json=rows, timeout=60)
-        r.raise_for_status()
+        if not r.ok:
+            log.error(f"Supabase INSERT {table} error {r.status_code}: {r.text[:500]}")
+            r.raise_for_status()
         return r.json()
 
     def upsert(self, table: str, rows: list, on_conflict: str = "") -> list:
@@ -80,7 +82,9 @@ class SupabaseClient:
         if on_conflict:
             url += f"?on_conflict={on_conflict}"
         r = requests.post(url, headers=headers, json=rows, timeout=60)
-        r.raise_for_status()
+        if not r.ok:
+            log.error(f"Supabase UPSERT {table} error {r.status_code}: {r.text[:500]}")
+            r.raise_for_status()
         return r.json()
 
 
@@ -116,13 +120,24 @@ def fetch_firms_hotspots(day_range: int = 2) -> list[dict]:
                     "confidence": row.get("confidence", ""),
                     "satellite": row.get("satellite", source),
                     "source": source,
-                    "detected_at": f"{row.get('acq_date', '')}T{row.get('acq_time', '0000')[:2]}:{row.get('acq_time', '0000')[2:]}:00",
+                    "detected_at": parse_firms_datetime(row.get('acq_date', ''), row.get('acq_time', '0000')),
                 })
             log.info(f"FIRMS {source}: {len(lines) - 1} hotspots descargados")
         except Exception as e:
             log.error(f"Error fetching FIRMS {source}: {e}")
 
     return all_hotspots
+
+
+def parse_firms_datetime(acq_date: str, acq_time: str) -> str:
+    """Parsea fecha/hora de FIRMS a formato ISO 8601 válido para PostgreSQL."""
+    try:
+        acq_time = str(acq_time).zfill(4)
+        hh = acq_time[:2]
+        mm = acq_time[2:4]
+        return f"{acq_date}T{hh}:{mm}:00+00:00"
+    except Exception:
+        return f"{acq_date}T00:00:00+00:00"
 
 
 # ─── Paso 2: Fetch meteorología de Open-Meteo (BATCH) ───────────────────────
@@ -498,11 +513,18 @@ def main():
                     "longitude": h["longitude"], "brightness": h["brightness"],
                     "frp": h["frp"], "source": h["source"],
                     "detected_at": h["detected_at"], "satellite": h["satellite"],
-                    "confidence": str(h["confidence"]),
+                    "confidence": str(h.get("confidence", ""))[:10],
                 })
         if hs_rows:
-            sb.insert("hotspots", hs_rows)
-            log.info(f"Insertados {len(hs_rows)} hotspots")
+            try:
+                # Insertar en lotes de 50 para evitar payloads muy grandes
+                for i in range(0, len(hs_rows), 50):
+                    batch = hs_rows[i:i+50]
+                    sb.insert("hotspots", batch)
+                log.info(f"Insertados {len(hs_rows)} hotspots")
+            except Exception as e:
+                log.error(f"Error insertando hotspots: {e}")
+                log.error(f"Ejemplo de row: {json.dumps(hs_rows[0]) if hs_rows else 'vacío'}")
 
     clima_rows = []
     for cve, dias in meteo_data.items():
@@ -517,8 +539,14 @@ def main():
                 "precipitacion": dia["precipitacion"], "et0": dia["et0"],
             })
     if clima_rows:
-        sb.upsert("clima_diario", clima_rows, on_conflict="municipio_id,fecha")
-        log.info(f"Upsert {len(clima_rows)} registros de clima")
+        try:
+            # Upsert en lotes de 100
+            for i in range(0, len(clima_rows), 100):
+                batch = clima_rows[i:i+100]
+                sb.upsert("clima_diario", batch, on_conflict="municipio_id,fecha")
+            log.info(f"Upsert {len(clima_rows)} registros de clima")
+        except Exception as e:
+            log.error(f"Error upsert clima: {e}")
 
     pred_rows = []
     for p in predicciones:
@@ -530,8 +558,11 @@ def main():
                 "features_json": json.dumps(p["features"]),
             })
     if pred_rows:
-        sb.upsert("predicciones", pred_rows, on_conflict="municipio_id,fecha")
-        log.info(f"Upsert {len(pred_rows)} predicciones")
+        try:
+            sb.upsert("predicciones", pred_rows, on_conflict="municipio_id,fecha")
+            log.info(f"Upsert {len(pred_rows)} predicciones")
+        except Exception as e:
+            log.error(f"Error upsert predicciones: {e}")
 
     # Paso 6: Alertas
     niveles_alerta = {"ALTO", "MUY_ALTO", "EXTREMO"}
