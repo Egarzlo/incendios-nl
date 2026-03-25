@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+etl_incendios.log
+.DS_Store
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+!data/.gitkeep

@@ -1,0 +1,3 @@
+# Carpeta para shapefiles de INEGI (no se suben a git por tamaño)
+# Descargar de: https://www.inegi.org.mx/temas/mg/
+# Colocar aquí: municipios_nl.shp, .shx, .dbf, .prj

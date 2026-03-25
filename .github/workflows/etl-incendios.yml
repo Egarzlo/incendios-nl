@@ -1,0 +1,69 @@
+name: ETL Predicción de Incendios NL
+
+on:
+  schedule:
+    - cron: '0 12 * * *'  # 6:00 AM CST (UTC-6)
+  workflow_dispatch:
+    inputs:
+      day_range:
+        description: 'Días de hotspots a descargar (1-5)'
+        required: false
+        default: '2'
+        type: choice
+        options: ['1', '2', '3', '5']
+
+jobs:
+  etl-incendios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev gdal-bin
+
+      - name: Instalar dependencias Python
+        run: pip install -r requirements.txt
+
+      - name: Verificar shapefile de municipios
+        run: |
+          if [ ! -f "data/municipios_nl.shp" ]; then
+            echo "⚠️ Shapefile no encontrado, usando geocodificación por bbox"
+          else
+            echo "✅ Shapefile encontrado: $(ls -la data/municipios_nl.*)"
+          fi
+
+      - name: Ejecutar ETL de incendios
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+        run: python etl_incendios_nl.py
+
+      - name: Subir log de ejecución
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: etl-log-${{ github.run_number }}
+          path: etl_incendios.log
+          retention-days: 30
+
+      - name: Notificar fallo
+        if: failure()
+        run: |
+          echo "⚠️ ETL de incendios falló en run #${{ github.run_number }}"
+          echo "Ver: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
