@@ -521,8 +521,8 @@
 
             allData = data;
 
-            // Need lat/lon for map — fetch from municipios
-            const muniResp = await fetch(`${SUPABASE_URL}/rest/v1/municipios?select=cve_muni,lat_centroide,lon_centroide`, {
+            // Fetch lat/lon from municipios
+            const muniResp = await fetch(`${SUPABASE_URL}/rest/v1/municipios?select=id,cve_muni,lat_centroide,lon_centroide`, {
                 headers: {
                     'apikey': SUPABASE_ANON_KEY,
                     'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -530,13 +530,44 @@
             });
             const munis = await muniResp.json();
             const muniMap = {};
-            munis.forEach(m => muniMap[m.cve_muni] = m);
+            const muniIdMap = {};
+            munis.forEach(m => { muniMap[m.cve_muni] = m; muniIdMap[m.id] = m; });
+
+            // Calcular dias sin lluvia desde clima_diario (últimos 30 días)
+            const climaResp = await fetch(`${SUPABASE_URL}/rest/v1/clima_diario?select=municipio_id,fecha,precipitacion&order=fecha.desc&limit=1600`, {
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                }
+            });
+            const climaData = await climaResp.json();
+            const climaByMuni = {};
+            climaData.forEach(c => {
+                if (!climaByMuni[c.municipio_id]) climaByMuni[c.municipio_id] = [];
+                climaByMuni[c.municipio_id].push(c);
+            });
+
+            // Calcular días consecutivos sin lluvia por municipio
+            const dslByMuni = {};
+            for (const [mid, dias] of Object.entries(climaByMuni)) {
+                dias.sort((a, b) => b.fecha.localeCompare(a.fecha));
+                let count = 0;
+                for (const d of dias) {
+                    if ((d.precipitacion || 0) < 1) count++;
+                    else break;
+                }
+                const m = muniIdMap[parseInt(mid)];
+                if (m) dslByMuni[m.cve_muni] = count;
+            }
 
             allData.forEach(d => {
                 const m = muniMap[d.cve_muni];
                 if (m) {
                     d.lat_centroide = m.lat_centroide;
                     d.lon_centroide = m.lon_centroide;
+                }
+                if (dslByMuni[d.cve_muni] !== undefined) {
+                    d.dias_sin_lluvia = dslByMuni[d.cve_muni];
                 }
             });
 
