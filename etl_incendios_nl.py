@@ -563,13 +563,27 @@ def main():
             })
     if clima_rows:
         try:
-            # Upsert en lotes de 100
             for i in range(0, len(clima_rows), 100):
                 batch = clima_rows[i:i+100]
                 sb.upsert("clima_diario", batch, on_conflict="municipio_id,fecha")
             log.info(f"Upsert {len(clima_rows)} registros de clima")
         except Exception as e:
             log.error(f"Error upsert clima: {e}")
+
+    # Actualizar dias_sin_lluvia en clima_diario para hoy
+    for cve, dsl in dias_sin_lluvia_db.items():
+        mid = municipios_map.get(cve)
+        if not mid:
+            continue
+        try:
+            sb.upsert("clima_diario", [{
+                "municipio_id": mid,
+                "fecha": date.today().isoformat(),
+                "dias_sin_lluvia": dsl,
+            }], on_conflict="municipio_id,fecha")
+        except Exception:
+            pass
+    log.info(f"Dias sin lluvia actualizados para {len(dias_sin_lluvia_db)} municipios")
 
     pred_rows = []
     for p in predicciones:
