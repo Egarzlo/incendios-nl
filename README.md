@@ -92,6 +92,4 @@ Actualmente usa un modelo basado en reglas ponderadas:
 
 Próximo paso: entrenar Random Forest / XGBoost con datos históricos de CONAFOR.
 
-## Desarrollado por
 
-**VOCACION AMBIENTAL A.C.** — Consultoría ambiental, Monterrey, NL
