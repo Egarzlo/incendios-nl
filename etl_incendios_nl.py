@@ -9,6 +9,7 @@ Configuración: variables de entorno (secrets en GitHub Actions)
 
 import os
 import json
+import time
 import logging
 from datetime import datetime, date, timedelta
 from typing import Optional
@@ -50,7 +51,7 @@ METEO_DAILY_VARS = [
 
 # ─── Supabase Client (lightweight, no SDK dependency issues) ────────────────
 class SupabaseClient:
-    """Cliente ligero para Supabase REST API — evita problemas de dependencias."""
+    """Cliente ligero para Supabase REST API."""
 
     def __init__(self, url: str, key: str):
         self.url = url.rstrip("/")
@@ -69,7 +70,7 @@ class SupabaseClient:
 
     def insert(self, table: str, rows: list) -> list:
         url = f"{self.url}/rest/v1/{table}"
-        r = requests.post(url, headers=self.headers, json=rows, timeout=30)
+        r = requests.post(url, headers=self.headers, json=rows, timeout=60)
         r.raise_for_status()
         return r.json()
 
@@ -78,7 +79,7 @@ class SupabaseClient:
         url = f"{self.url}/rest/v1/{table}"
         if on_conflict:
             url += f"?on_conflict={on_conflict}"
-        r = requests.post(url, headers=headers, json=rows, timeout=30)
+        r = requests.post(url, headers=headers, json=rows, timeout=60)
         r.raise_for_status()
         return r.json()
 
@@ -124,21 +125,27 @@ def fetch_firms_hotspots(day_range: int = 2) -> list[dict]:
     return all_hotspots
 
 
-# ─── Paso 2: Fetch meteorología de Open-Meteo ───────────────────────────────
+# ─── Paso 2: Fetch meteorología de Open-Meteo (BATCH) ───────────────────────
 def fetch_open_meteo(municipios: list[dict], days_back: int = 7) -> dict:
+    """
+    Usa la API de Open-Meteo con múltiples coordenadas en una sola llamada.
+    Open-Meteo acepta listas de lat/lon separadas por coma.
+    Hacemos lotes de 15 municipios para no saturar.
+    """
     results = {}
     today = date.today()
     start = today - timedelta(days=days_back)
+    batch_size = 15
 
-    for muni in municipios:
-        cve = muni["cve_muni"]
-        lat = muni["lat_centroide"]
-        lon = muni["lon_centroide"]
+    for i in range(0, len(municipios), batch_size):
+        batch = municipios[i:i + batch_size]
+        lats = ",".join(str(m["lat_centroide"]) for m in batch)
+        lons = ",".join(str(m["lon_centroide"]) for m in batch)
 
         url = "https://api.open-meteo.com/v1/forecast"
         params = {
-            "latitude": lat,
-            "longitude": lon,
+            "latitude": lats,
+            "longitude": lons,
             "daily": ",".join(METEO_DAILY_VARS),
             "start_date": start.isoformat(),
             "end_date": today.isoformat(),
@@ -146,29 +153,74 @@ def fetch_open_meteo(municipios: list[dict], days_back: int = 7) -> dict:
         }
 
         try:
-            resp = requests.get(url, params=params, timeout=30)
+            resp = requests.get(url, params=params, timeout=60)
             resp.raise_for_status()
             data = resp.json()
-            daily = data.get("daily", {})
-            times = daily.get("time", [])
 
-            muni_data = []
-            for i, fecha_str in enumerate(times):
-                muni_data.append({
-                    "fecha": fecha_str,
-                    "temp_max": safe_float(daily.get("temperature_2m_max", []), i),
-                    "temp_min": safe_float(daily.get("temperature_2m_min", []), i),
-                    "humedad_min": safe_float(daily.get("relative_humidity_2m_min", []), i),
-                    "viento_max": safe_float(daily.get("wind_speed_10m_max", []), i),
-                    "precipitacion": safe_float(daily.get("precipitation_sum", []), i),
-                    "et0": safe_float(daily.get("et0_fao_evapotranspiration", []), i),
-                })
-            results[cve] = muni_data
+            # Si es un solo municipio, Open-Meteo retorna objeto; si son varios, retorna lista
+            if isinstance(data, dict):
+                data = [data]
+
+            for j, muni_data_raw in enumerate(data):
+                if j >= len(batch):
+                    break
+                cve = batch[j]["cve_muni"]
+                daily = muni_data_raw.get("daily", {})
+                times = daily.get("time", [])
+
+                muni_data = []
+                for k, fecha_str in enumerate(times):
+                    muni_data.append({
+                        "fecha": fecha_str,
+                        "temp_max": safe_float(daily.get("temperature_2m_max", []), k),
+                        "temp_min": safe_float(daily.get("temperature_2m_min", []), k),
+                        "humedad_min": safe_float(daily.get("relative_humidity_2m_min", []), k),
+                        "viento_max": safe_float(daily.get("wind_speed_10m_max", []), k),
+                        "precipitacion": safe_float(daily.get("precipitation_sum", []), k),
+                        "et0": safe_float(daily.get("et0_fao_evapotranspiration", []), k),
+                    })
+                results[cve] = muni_data
+
+            log.info(f"Open-Meteo lote {i//batch_size + 1}: {len(batch)} municipios OK")
+
         except Exception as e:
-            log.error(f"Error Open-Meteo para {cve} ({lat},{lon}): {e}")
-            results[cve] = []
+            log.error(f"Error Open-Meteo lote {i//batch_size + 1}: {e}")
+            # Fallback: intentar uno por uno con pausa
+            for m in batch:
+                cve = m["cve_muni"]
+                if cve not in results:
+                    try:
+                        time.sleep(1)
+                        resp2 = requests.get(url, params={
+                            "latitude": m["lat_centroide"],
+                            "longitude": m["lon_centroide"],
+                            "daily": ",".join(METEO_DAILY_VARS),
+                            "start_date": start.isoformat(),
+                            "end_date": today.isoformat(),
+                            "timezone": "America/Monterrey",
+                        }, timeout=30)
+                        resp2.raise_for_status()
+                        d = resp2.json().get("daily", {})
+                        ts = d.get("time", [])
+                        results[cve] = [{
+                            "fecha": ts[k],
+                            "temp_max": safe_float(d.get("temperature_2m_max", []), k),
+                            "temp_min": safe_float(d.get("temperature_2m_min", []), k),
+                            "humedad_min": safe_float(d.get("relative_humidity_2m_min", []), k),
+                            "viento_max": safe_float(d.get("wind_speed_10m_max", []), k),
+                            "precipitacion": safe_float(d.get("precipitation_sum", []), k),
+                            "et0": safe_float(d.get("et0_fao_evapotranspiration", []), k),
+                        } for k in range(len(ts))]
+                    except Exception as e2:
+                        log.error(f"Error Open-Meteo individual {cve}: {e2}")
+                        results[cve] = []
 
-    log.info(f"Open-Meteo: datos obtenidos para {len(results)} municipios")
+        # Pausa entre lotes para no saturar la API
+        if i + batch_size < len(municipios):
+            time.sleep(2)
+
+    ok_count = sum(1 for v in results.values() if v)
+    log.info(f"Open-Meteo: datos obtenidos para {ok_count}/{len(municipios)} municipios")
     return results
 
 
@@ -182,10 +234,6 @@ def safe_float(lst, idx):
 
 # ─── Paso 3: Geocodificar hotspots a municipios ─────────────────────────────
 def geocode_hotspots_simple(hotspots: list[dict], municipios: list[dict]) -> list[dict]:
-    """
-    Geocodificación simple por distancia al centroide municipal.
-    Usa esto cuando no hay shapefile disponible.
-    """
     from math import radians, sin, cos, sqrt, atan2
 
     def haversine(lat1, lon1, lat2, lon2):
@@ -204,7 +252,7 @@ def geocode_hotspots_simple(hotspots: list[dict], municipios: list[dict]) -> lis
             if d < best_dist:
                 best_dist = d
                 best_cve = m["cve_muni"]
-        if best_cve and best_dist < 100:  # Max 100km del centroide
+        if best_cve and best_dist < 100:
             h["cve_muni"] = best_cve
             geocoded.append(h)
 
@@ -213,7 +261,6 @@ def geocode_hotspots_simple(hotspots: list[dict], municipios: list[dict]) -> lis
 
 
 def geocode_hotspots_geopandas(hotspots: list[dict]) -> list[dict]:
-    """Geocodificación precisa con shapefile (point-in-polygon)."""
     try:
         import geopandas as gpd
         from shapely.geometry import Point
@@ -250,7 +297,6 @@ def calcular_dias_sin_lluvia(clima_historico: list[dict]) -> int:
 
 
 def calcular_riesgo(features: dict) -> tuple[float, str]:
-    """Modelo basado en reglas (placeholder para ML futuro)."""
     score = 0.0
 
     dsl = features.get("dias_sin_lluvia", 0)
@@ -319,7 +365,7 @@ def enviar_email(destinatario: str, mensaje: str, pred: dict):
     payload = {
         "personalizations": [{"to": [{"email": destinatario}]}],
         "from": {"email": "alertas@bioimpact.mx", "name": "Alertas Incendios NL"},
-        "subject": f"⚠️ Alerta incendio {pred['nivel']} — {muni}, NL",
+        "subject": f"Alerta incendio {pred['nivel']} — {muni}, NL",
         "content": [{"type": "text/plain", "value": mensaje}],
     }
     resp = requests.post(
@@ -360,9 +406,8 @@ def main():
     log.info(f"Fecha: {date.today().isoformat()}")
     log.info("=" * 60)
 
-    # Validar configuración mínima
     if not FIRMS_MAP_KEY:
-        log.error("FIRMS_MAP_KEY no configurada. Obtén una gratis en https://firms.modaps.eosdis.nasa.gov/api/map_key/")
+        log.error("FIRMS_MAP_KEY no configurada.")
         return
     if not SUPABASE_URL or not SUPABASE_KEY:
         log.error("SUPABASE_URL o SUPABASE_KEY no configuradas.")
@@ -370,7 +415,6 @@ def main():
 
     sb = SupabaseClient(SUPABASE_URL, SUPABASE_KEY)
 
-    # Cargar municipios de Supabase
     municipios_db = sb.select("municipios", {"select": "id,cve_muni,lat_centroide,lon_centroide,nombre,elevacion_media,pendiente_media"})
     if not municipios_db:
         log.error("No hay municipios en la BD. Ejecuta schema.sql primero.")
@@ -380,13 +424,13 @@ def main():
     municipios_info = {m["cve_muni"]: m for m in municipios_db}
     log.info(f"Municipios en BD: {len(municipios_map)}")
 
-    # Paso 1: Hotspots
+    # Paso 1
     hotspots_raw = fetch_firms_hotspots(day_range=2)
 
-    # Paso 2: Meteorología
+    # Paso 2
     meteo_data = fetch_open_meteo(municipios_db, days_back=7)
 
-    # Paso 3: Geocodificar
+    # Paso 3
     hotspots_geo = []
     if hotspots_raw:
         result = geocode_hotspots_geopandas(hotspots_raw) if os.path.exists(MUNICIPIOS_SHP) else None
@@ -399,7 +443,7 @@ def main():
     for h in hotspots_geo:
         hotspots_por_muni.setdefault(h["cve_muni"], []).append(h)
 
-    # Paso 4: Features + predicción
+    # Paso 4
     predicciones = []
     for cve, info in municipios_info.items():
         clima_muni = meteo_data.get(cve, [])
@@ -444,7 +488,6 @@ def main():
         log.info(f"  {nivel}: {len(munis)} municipios — {', '.join(munis[:5])}")
 
     # Paso 5: Upsert a Supabase
-    # Hotspots
     if hotspots_geo:
         hs_rows = []
         for h in hotspots_geo:
@@ -461,7 +504,6 @@ def main():
             sb.insert("hotspots", hs_rows)
             log.info(f"Insertados {len(hs_rows)} hotspots")
 
-    # Clima
     clima_rows = []
     for cve, dias in meteo_data.items():
         mid = municipios_map.get(cve)
@@ -478,7 +520,6 @@ def main():
         sb.upsert("clima_diario", clima_rows, on_conflict="municipio_id,fecha")
         log.info(f"Upsert {len(clima_rows)} registros de clima")
 
-    # Predicciones
     pred_rows = []
     for p in predicciones:
         mid = municipios_map.get(p["cve_muni"])
