@@ -458,7 +458,30 @@ def main():
     for h in hotspots_geo:
         hotspots_por_muni.setdefault(h["cve_muni"], []).append(h)
 
-    # Paso 4
+    # Paso 4: calcular días sin lluvia desde BD (usa histórico completo)
+    dias_sin_lluvia_db = {}
+    for cve, info in municipios_info.items():
+        mid = municipios_map.get(cve)
+        if not mid:
+            continue
+        try:
+            clima_hist = sb.select("clima_diario", {
+                "select": "fecha,precipitacion",
+                "municipio_id": f"eq.{mid}",
+                "order": "fecha.desc",
+                "limit": "60",
+            })
+            dias = 0
+            for dia in clima_hist:
+                precip = dia.get("precipitacion") or 0
+                if precip < 1.0:
+                    dias += 1
+                else:
+                    break
+            dias_sin_lluvia_db[cve] = dias
+        except Exception:
+            dias_sin_lluvia_db[cve] = 0
+
     predicciones = []
     for cve, info in municipios_info.items():
         clima_muni = meteo_data.get(cve, [])
@@ -466,7 +489,7 @@ def main():
             continue
 
         clima_hoy = clima_muni[-1]
-        dsl = calcular_dias_sin_lluvia(clima_muni)
+        dsl = dias_sin_lluvia_db.get(cve, calcular_dias_sin_lluvia(clima_muni))
         hs_muni = hotspots_por_muni.get(cve, [])
 
         features = {
