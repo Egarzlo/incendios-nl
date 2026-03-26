@@ -416,9 +416,23 @@
         }).addTo(map);
     }
 
+    function normalizeName(name) {
+        return (name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    const NAME_ALIASES = {
+        'carmen': 'el carmen',
+        'el carmen': 'el carmen',
+    };
+
+    function matchName(name) {
+        const n = normalizeName(name);
+        return NAME_ALIASES[n] || n;
+    }
+
     async function plotChoropleth(data) {
-        const dataMap = {};
-        data.forEach(d => { dataMap[d.cve_muni] = d; });
+        const dataByName = {};
+        data.forEach(d => { dataByName[matchName(d.municipio)] = d; });
 
         try {
             const resp = await fetch('nuevo_leon.json');
@@ -428,22 +442,21 @@
 
             geojsonLayer = L.geoJSON(geojson, {
                 style: function(feature) {
-                    const cveMun = String(feature.properties.CVE_MUN || feature.properties.CVEGEO || '').slice(-3);
-                    const d = dataMap[cveMun];
+                    const nombre = feature.properties.NAME_2 || feature.properties.NOM_MUN || '';
+                    const d = dataByName[matchName(nombre)];
                     const nivel = d ? d.nivel_riesgo : 'BAJO';
                     const c = NIVEL_COLORS[nivel] || NIVEL_COLORS.BAJO;
                     return {
                         fillColor: c.color,
-                        weight: 1,
+                        weight: 1.5,
                         opacity: 1,
-                        color: '#fff',
-                        fillOpacity: 0.7,
+                        color: '#ffffff',
+                        fillOpacity: 0.75,
                     };
                 },
                 onEachFeature: function(feature, layer) {
-                    const cveMun = String(feature.properties.CVE_MUN || feature.properties.CVEGEO || '').slice(-3);
-                    const d = dataMap[cveMun];
-                    const nombre = feature.properties.NOM_MUN || feature.properties.NOMGEO || d?.municipio || 'Desconocido';
+                    const nombre = feature.properties.NAME_2 || feature.properties.NOM_MUN || 'Desconocido';
+                    const d = dataByName[matchName(nombre)];
 
                     if (d) {
                         const nivel = d.nivel_riesgo || 'BAJO';
