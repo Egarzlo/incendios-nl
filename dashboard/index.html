@@ -393,7 +393,7 @@
         EXTREMO:  { color: '#501313', bg: '#501313', text: '#F7C1C1' },
     };
 
-    const NIVEL_RADIUS = { BAJO: 8, MEDIO: 10, ALTO: 13, MUY_ALTO: 16, EXTREMO: 20 };
+    let geojsonLayer = null;
 
     function showSection(name) {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -416,45 +416,86 @@
         }).addTo(map);
     }
 
-    function plotMarkers(data) {
-        data.forEach(d => {
-            if (!d.lat_centroide || !d.lon_centroide) return;
-            const nivel = d.nivel_riesgo || 'BAJO';
-            const c = NIVEL_COLORS[nivel] || NIVEL_COLORS.BAJO;
-            const r = NIVEL_RADIUS[nivel] || 8;
-            const prob = (d.prob_incendio * 100).toFixed(0);
+    async function plotChoropleth(data) {
+        const dataMap = {};
+        data.forEach(d => { dataMap[d.cve_muni] = d; });
 
-            const marker = L.circleMarker([d.lat_centroide, d.lon_centroide], {
-                radius: r,
-                fillColor: c.color,
-                color: '#fff',
-                weight: 1.5,
-                fillOpacity: 0.85,
+        try {
+            const resp = await fetch('nuevo_leon.json');
+            const geojson = await resp.json();
+
+            if (geojsonLayer) { map.removeLayer(geojsonLayer); }
+
+            geojsonLayer = L.geoJSON(geojson, {
+                style: function(feature) {
+                    const cveMun = String(feature.properties.CVE_MUN || feature.properties.CVEGEO || '').slice(-3);
+                    const d = dataMap[cveMun];
+                    const nivel = d ? d.nivel_riesgo : 'BAJO';
+                    const c = NIVEL_COLORS[nivel] || NIVEL_COLORS.BAJO;
+                    return {
+                        fillColor: c.color,
+                        weight: 1,
+                        opacity: 1,
+                        color: '#fff',
+                        fillOpacity: 0.7,
+                    };
+                },
+                onEachFeature: function(feature, layer) {
+                    const cveMun = String(feature.properties.CVE_MUN || feature.properties.CVEGEO || '').slice(-3);
+                    const d = dataMap[cveMun];
+                    const nombre = feature.properties.NOM_MUN || feature.properties.NOMGEO || d?.municipio || 'Desconocido';
+
+                    if (d) {
+                        const nivel = d.nivel_riesgo || 'BAJO';
+                        const c = NIVEL_COLORS[nivel] || NIVEL_COLORS.BAJO;
+                        const prob = (d.prob_incendio * 100).toFixed(0);
+                        layer.bindPopup(`
+                            <div style="font-family:system-ui;min-width:200px">
+                                <div style="font-weight:500;font-size:14px;margin-bottom:4px">${nombre}</div>
+                                <span style="background:${c.bg};color:${c.text};padding:2px 8px;border-radius:3px;font-size:12px;font-weight:500">${nivel.replace('_',' ')}</span>
+                                <span style="font-size:20px;font-weight:500;color:${c.color};margin-left:8px">${prob}%</span>
+                                <hr style="margin:8px 0;border:none;border-top:1px solid #e0e0d8"/>
+                                <div style="font-size:12px;color:#73726c;line-height:1.8">
+                                    Temp. max: <strong>${d.temp_max ?? '\u2014'}\u00b0C</strong><br/>
+                                    Humedad min: <strong>${d.humedad_min ?? '\u2014'}%</strong><br/>
+                                    Viento max: <strong>${d.viento_max ?? '\u2014'} km/h</strong><br/>
+                                    Dias sin lluvia: <strong>${d.dias_sin_lluvia ?? '\u2014'}</strong><br/>
+                                    Hotspots 24h: <strong>${d.hotspots_24h ?? 0}</strong>
+                                </div>
+                            </div>
+                        `);
+                    } else {
+                        layer.bindPopup(`<div style="font-family:system-ui"><strong>${nombre}</strong><br/>Sin datos disponibles</div>`);
+                    }
+
+                    layer.bindTooltip(nombre, { sticky: true, direction: 'top', className: 'leaflet-tooltip-custom' });
+
+                    layer.on({
+                        mouseover: function(e) {
+                            e.target.setStyle({ weight: 3, color: '#333', fillOpacity: 0.85 });
+                            e.target.bringToFront();
+                        },
+                        mouseout: function(e) {
+                            geojsonLayer.resetStyle(e.target);
+                        }
+                    });
+                }
             }).addTo(map);
 
-            marker.bindPopup(`
-                <div style="font-family:system-ui;min-width:200px">
-                    <div style="font-weight:500;font-size:14px;margin-bottom:4px">${d.municipio}</div>
-                    <span style="background:${c.bg};color:${c.text};padding:2px 8px;border-radius:3px;font-size:12px;font-weight:500">${nivel.replace('_',' ')}</span>
-                    <span style="font-size:20px;font-weight:500;color:${c.color};margin-left:8px">${prob}%</span>
-                    <hr style="margin:8px 0;border:none;border-top:1px solid #e0e0d8"/>
-                    <div style="font-size:12px;color:#73726c;line-height:1.8">
-                        Temp. max: <strong>${d.temp_max ?? '—'}°C</strong><br/>
-                        Humedad min: <strong>${d.humedad_min ?? '—'}%</strong><br/>
-                        Viento max: <strong>${d.viento_max ?? '—'} km/h</strong><br/>
-                        Dias sin lluvia: <strong>${d.dias_sin_lluvia ?? '—'}</strong><br/>
-                        Hotspots 24h: <strong>${d.hotspots_24h ?? 0}</strong>
-                    </div>
-                </div>
-            `);
+            map.fitBounds(geojsonLayer.getBounds(), { padding: [20, 20] });
 
-            marker.bindTooltip(d.municipio, {
-                permanent: false,
-                direction: 'top',
-                offset: [0, -r],
-                className: 'leaflet-tooltip-custom'
+        } catch (err) {
+            console.error('Error cargando GeoJSON:', err);
+            // Fallback: usar marcadores circulares
+            data.forEach(d => {
+                if (!d.lat_centroide || !d.lon_centroide) return;
+                const nivel = d.nivel_riesgo || 'BAJO';
+                const c = NIVEL_COLORS[nivel] || NIVEL_COLORS.BAJO;
+                L.circleMarker([d.lat_centroide, d.lon_centroide], {
+                    radius: 10, fillColor: c.color, color: '#fff', weight: 1.5, fillOpacity: 0.85,
+                }).addTo(map).bindPopup(`<strong>${d.municipio}</strong><br/>${nivel} — ${(d.prob_incendio*100).toFixed(0)}%`);
             });
-        });
+        }
     }
 
     function updateStats(data) {
@@ -575,7 +616,7 @@
             document.getElementById('fecha-display').textContent = fecha;
 
             updateStats(allData);
-            plotMarkers(allData);
+            await plotChoropleth(allData);
             renderCards();
 
         } catch (err) {

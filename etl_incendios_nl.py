@@ -540,14 +540,12 @@ def main():
                 })
         if hs_rows:
             try:
-                # Insertar en lotes de 50 para evitar payloads muy grandes
                 for i in range(0, len(hs_rows), 50):
                     batch = hs_rows[i:i+50]
-                    sb.insert("hotspots", batch)
-                log.info(f"Insertados {len(hs_rows)} hotspots")
+                    sb.upsert("hotspots", batch, on_conflict="latitude,longitude,detected_at,source")
+                log.info(f"Upsert {len(hs_rows)} hotspots (sin duplicados)")
             except Exception as e:
-                log.error(f"Error insertando hotspots: {e}")
-                log.error(f"Ejemplo de row: {json.dumps(hs_rows[0]) if hs_rows else 'vacío'}")
+                log.error(f"Error upsert hotspots: {e}")
 
     clima_rows = []
     for cve, dias in meteo_data.items():
