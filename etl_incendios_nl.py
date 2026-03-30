@@ -12,10 +12,18 @@ import json
 import time
 import logging
 from datetime import datetime, date, timedelta
+from pathlib import Path
 from typing import Optional
 
 import requests
 from dotenv import load_dotenv
+
+try:
+    import numpy as np
+    import joblib
+    HAS_ML = True
+except ImportError:
+    HAS_ML = False
 
 load_dotenv()
 logging.basicConfig(
@@ -352,6 +360,70 @@ def calcular_riesgo(features: dict) -> tuple[float, str]:
     return prob, nivel
 
 
+# ─── Paso 4b: Modelo ML ─────────────────────────────────────────────────────
+def cargar_modelo_ml(model_path: str = None) -> Optional[dict]:
+    """Carga el modelo ML (.pkl) si está disponible."""
+    if not HAS_ML:
+        log.warning("numpy/joblib no instalados — modelo ML deshabilitado")
+        return None
+
+    if model_path is None:
+        # Buscar en el mismo directorio que el script
+        script_dir = Path(__file__).parent
+        model_path = str(script_dir / "modelo_incendios_nl.pkl")
+
+    if not os.path.exists(model_path):
+        log.warning(f"Modelo ML no encontrado: {model_path}")
+        return None
+
+    try:
+        model_data = joblib.load(model_path)
+        log.info(f"Modelo ML cargado: {model_data.get('model_name', '?')} v{model_data.get('version', '?')}")
+        return model_data
+    except Exception as e:
+        log.error(f"Error cargando modelo ML: {e}")
+        return None
+
+
+def predecir_ml(model_data: dict, features: dict, muni_info: dict) -> tuple[float, str]:
+    """Genera predicción usando el modelo ML."""
+    feature_names = model_data["features"]
+    threshold = model_data.get("threshold", 0.5)
+    model = model_data["model"]
+    scaler = model_data.get("scaler")
+
+    # Mapear features del ETL a los features del modelo
+    feature_map = {
+        "temp_max": features.get("temp_max") or 0,
+        "temp_min": features.get("temp_min") or 0,
+        "humedad_min": features.get("humedad_min") or 50,
+        "viento_max": features.get("viento_max") or 0,
+        "precipitacion": features.get("precipitacion") or 0,
+        "et0": features.get("et0") or 0,
+        "dias_sin_lluvia": features.get("dias_sin_lluvia", 0),
+        "mes": date.today().month,
+        "dia_del_ano": date.today().timetuple().tm_yday,
+        "lat": muni_info.get("lat_centroide", 25.5),
+        "lon": muni_info.get("lon_centroide", -100.0),
+        "elevacion": muni_info.get("elevacion_media", 500),
+    }
+
+    X = np.array([[feature_map.get(f, 0) for f in feature_names]])
+
+    if scaler is not None:
+        X = scaler.transform(X)
+
+    prob = model.predict_proba(X)[0, 1]
+
+    if prob >= 0.8: nivel = "EXTREMO"
+    elif prob >= 0.6: nivel = "MUY_ALTO"
+    elif prob >= 0.4: nivel = "ALTO"
+    elif prob >= 0.2: nivel = "MEDIO"
+    else: nivel = "BAJO"
+
+    return float(prob), nivel
+
+
 # ─── Paso 5: Alertas ────────────────────────────────────────────────────────
 def generar_mensaje(pred: dict, contacto: dict) -> str:
     f = pred["features"]
@@ -482,7 +554,12 @@ def main():
         except Exception:
             dias_sin_lluvia_db[cve] = 0
 
-    predicciones = []
+    # Cargar modelo ML
+    modelo_ml = cargar_modelo_ml()
+
+    predicciones = []       # Reglas v1 (condiciones climáticas)
+    predicciones_ml = []    # ML v2
+
     for cve, info in municipios_info.items():
         clima_muni = meteo_data.get(cve, [])
         if not clima_muni:
@@ -508,6 +585,7 @@ def main():
             "pendiente_media": info.get("pendiente_media", 0),
         }
 
+        # Predicción por reglas (condiciones climáticas)
         prob, nivel = calcular_riesgo(features)
         predicciones.append({
             "cve_muni": cve,
@@ -516,14 +594,39 @@ def main():
             "nivel": nivel,
             "features": features,
             "muni_nombre": info.get("nombre", cve),
+            "modelo_version": "rules_v1",
         })
 
-    log.info(f"Predicciones: {len(predicciones)}")
+        # Predicción ML
+        if modelo_ml:
+            try:
+                prob_ml, nivel_ml = predecir_ml(modelo_ml, features, info)
+                predicciones_ml.append({
+                    "cve_muni": cve,
+                    "fecha": clima_hoy["fecha"],
+                    "prob": prob_ml,
+                    "nivel": nivel_ml,
+                    "features": features,
+                    "muni_nombre": info.get("nombre", cve),
+                    "modelo_version": "ml_v1",
+                })
+            except Exception as e:
+                log.error(f"Error ML para {cve}: {e}")
+
+    log.info(f"Predicciones reglas: {len(predicciones)}")
     por_nivel = {}
     for p in predicciones:
         por_nivel.setdefault(p["nivel"], []).append(p["muni_nombre"])
     for nivel, munis in sorted(por_nivel.items()):
         log.info(f"  {nivel}: {len(munis)} municipios — {', '.join(munis[:5])}")
+
+    if predicciones_ml:
+        log.info(f"Predicciones ML: {len(predicciones_ml)}")
+        por_nivel_ml = {}
+        for p in predicciones_ml:
+            por_nivel_ml.setdefault(p["nivel"], []).append(p["muni_nombre"])
+        for nivel, munis in sorted(por_nivel_ml.items()):
+            log.info(f"  ML {nivel}: {len(munis)} municipios — {', '.join(munis[:5])}")
 
     # Paso 5: Upsert a Supabase
     if hotspots_geo:
@@ -583,25 +686,34 @@ def main():
             pass
     log.info(f"Dias sin lluvia actualizados para {len(dias_sin_lluvia_db)} municipios")
 
+    # Upsert predicciones (reglas + ML)
+    todas_predicciones = predicciones + predicciones_ml
     pred_rows = []
-    for p in predicciones:
+    for p in todas_predicciones:
         mid = municipios_map.get(p["cve_muni"])
         if mid:
             pred_rows.append({
                 "municipio_id": mid, "fecha": p["fecha"],
                 "prob_incendio": p["prob"], "nivel_riesgo": p["nivel"],
                 "features_json": json.dumps(p["features"]),
+                "modelo_version": p.get("modelo_version", "rules_v1"),
             })
     if pred_rows:
         try:
-            sb.upsert("predicciones", pred_rows, on_conflict="municipio_id,fecha")
-            log.info(f"Upsert {len(pred_rows)} predicciones")
+            sb.upsert("predicciones", pred_rows, on_conflict="municipio_id,fecha,modelo_version")
+            log.info(f"Upsert {len(pred_rows)} predicciones ({len(predicciones)} reglas + {len(predicciones_ml)} ML)")
         except Exception as e:
             log.error(f"Error upsert predicciones: {e}")
 
-    # Paso 6: Alertas
+    # Paso 6: Alertas (se activan si CUALQUIERA de los dos modelos indica riesgo alto)
     niveles_alerta = {"ALTO", "MUY_ALTO", "EXTREMO"}
-    alertas = [p for p in predicciones if p["nivel"] in niveles_alerta]
+    alertas_set = {}  # cve -> pred con nivel más alto
+    for p in todas_predicciones:
+        if p["nivel"] in niveles_alerta:
+            cve = p["cve_muni"]
+            if cve not in alertas_set or p["prob"] > alertas_set[cve]["prob"]:
+                alertas_set[cve] = p
+    alertas = list(alertas_set.values())
 
     if alertas:
         log.info(f"🔥 {len(alertas)} municipios con alerta")

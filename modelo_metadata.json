@@ -1,0 +1,32 @@
+{
+  "model_name": "Random Forest",
+  "version": "ml_v1",
+  "features": [
+    "temp_max",
+    "temp_min",
+    "humedad_min",
+    "viento_max",
+    "precipitacion",
+    "et0",
+    "dias_sin_lluvia",
+    "mes",
+    "dia_del_ano",
+    "lat",
+    "lon",
+    "elevacion"
+  ],
+  "threshold": 0.897723,
+  "metrics": {
+    "roc_auc": 0.8697,
+    "pr_auc": 0.0166,
+    "f1": 0.0599,
+    "recall": 0.0714
+  },
+  "training_period": "2015-2022",
+  "test_period": "2023-2024",
+  "n_train": 149022,
+  "n_test": 37281,
+  "n_fires_train": 328,
+  "n_fires_test": 70,
+  "class_ratio": "453:1"
+}

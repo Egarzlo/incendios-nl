@@ -9,3 +9,4 @@ etl_incendios.log
 *.prj
 *.cpg
 !data/.gitkeep
+data/*.csv
