@@ -529,6 +529,83 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // TEXTO EXPLICATIVO — genera interpretación en lenguaje sencillo
+    // ═══════════════════════════════════════════════════════════════
+    function generarExplicacion(d) {
+        const partes = [];
+        const temp = d.temp_max;
+        const hum = d.humedad_min;
+        const viento = d.viento_max;
+        const dsl = d.dias_sin_lluvia;
+        const hs = d.hotspots_24h || 0;
+        const nivel = d.nivel_riesgo || 'BAJO';
+
+        // Sequía
+        if (dsl != null) {
+            if (dsl >= 14) partes.push(`Llevan <b>${dsl} dias sin lluvia</b>, lo que significa que la vegetacion esta muy seca y puede arder con facilidad.`);
+            else if (dsl >= 7) partes.push(`Van <b>${dsl} dias sin lluvia</b>. La vegetacion ha perdido humedad y es mas vulnerable al fuego.`);
+            else if (dsl >= 3) partes.push(`Han pasado <b>${dsl} dias sin lluvia</b>. La vegetacion aun conserva algo de humedad.`);
+            else partes.push(`Ha llovido recientemente (<b>${dsl} dias sin lluvia</b>), lo que reduce el riesgo de incendio.`);
+        }
+
+        // Temperatura
+        if (temp != null) {
+            if (temp >= 40) partes.push(`La temperatura maxima es de <b>${temp}°C</b>, extremadamente alta. Esto precalienta el terreno y facilita la propagacion del fuego.`);
+            else if (temp >= 35) partes.push(`Se esperan <b>${temp}°C</b> de maxima, lo cual seca aun mas la vegetacion y favorece los incendios.`);
+            else if (temp >= 30) partes.push(`La temperatura maxima es de <b>${temp}°C</b>, moderadamente alta para la temporada.`);
+            else partes.push(`La temperatura es de <b>${temp}°C</b>, dentro de rangos que no elevan significativamente el riesgo.`);
+        }
+
+        // Humedad
+        if (hum != null) {
+            if (hum <= 15) partes.push(`La humedad es de solo <b>${hum}%</b>, criticamente baja. El ambiente esta muy seco y cualquier chispa puede iniciar fuego.`);
+            else if (hum <= 25) partes.push(`La humedad baja a <b>${hum}%</b>, lo que indica un ambiente seco que favorece la ignicion.`);
+            else if (hum <= 40) partes.push(`La humedad minima es de <b>${hum}%</b>, por debajo de lo ideal pero no critica.`);
+            else partes.push(`La humedad es de <b>${hum}%</b>, un nivel que ayuda a mantener humeda la vegetacion.`);
+        }
+
+        // Viento
+        if (viento != null) {
+            if (viento >= 50) partes.push(`Hay vientos fuertes de <b>${viento} km/h</b> que pueden propagar un incendio rapidamente y dificultar las labores de control.`);
+            else if (viento >= 30) partes.push(`Los vientos de <b>${viento} km/h</b> son lo suficientemente fuertes para avivar y extender un incendio.`);
+            else if (viento >= 15) partes.push(`Vientos moderados de <b>${viento} km/h</b>.`);
+        }
+
+        // Hotspots
+        if (hs >= 3) partes.push(`Se detectaron <b>${hs} puntos de calor</b> por satelite en las ultimas 24 horas, lo que sugiere actividad de fuego activo en el municipio.`);
+        else if (hs >= 1) partes.push(`Se detecto <b>${hs} punto de calor</b> satelital en las ultimas 24 horas.`);
+
+        // Conclusión según nivel
+        let conclusion = '';
+        if (nivel === 'EXTREMO') conclusion = '<b>Riesgo extremo.</b> Se recomienda movilizacion inmediata de brigadas y coordinacion interinstitucional.';
+        else if (nivel === 'MUY_ALTO') conclusion = '<b>Riesgo muy alto.</b> Se recomienda activar brigadas y mantener vigilancia permanente.';
+        else if (nivel === 'ALTO') conclusion = '<b>Riesgo alto.</b> Se sugiere alertar a Proteccion Civil y preparar recursos de combate.';
+        else if (nivel === 'MEDIO') conclusion = '<b>Riesgo medio.</b> Se recomienda mantener brigadas en estado de preparacion.';
+        else conclusion = '<b>Riesgo bajo.</b> Condiciones favorables. Se sugiere monitoreo rutinario.';
+
+        partes.push(conclusion);
+        return partes.join(' ');
+    }
+
+    function generarExplicacionCorta(d) {
+        const dsl = d.dias_sin_lluvia;
+        const temp = d.temp_max;
+        const hum = d.humedad_min;
+        const factores = [];
+        if (dsl != null && dsl >= 7) factores.push(`${dsl}d sin lluvia`);
+        if (temp != null && temp >= 35) factores.push(`${temp}°C`);
+        if (hum != null && hum <= 25) factores.push(`${hum}% humedad`);
+        if ((d.hotspots_24h || 0) >= 1) factores.push(`${d.hotspots_24h} hotspots`);
+
+        if (!factores.length) {
+            const nivel = d.nivel_riesgo || 'BAJO';
+            if (nivel === 'BAJO') return 'Condiciones estables, sin factores de riesgo elevados.';
+            return 'Condiciones moderadas de riesgo.';
+        }
+        return 'Factores principales: ' + factores.join(', ') + '.';
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // MAPAS — usan NL_GEOJSON embebido (sin fetch externo)
     // ═══════════════════════════════════════════════════════════════
     function initMap() {
@@ -561,21 +638,21 @@
                     const antroInfo = d._antro && d._antro.etiquetas.length
                         ? `<br/><span style="font-size:11px;color:#664D00;background:#FFF3CD;padding:2px 6px;border-radius:3px">+${d._antro.puntos}pts: ${d._antro.etiquetas.join(', ')}</span>`
                         : '';
+                    const explicacion = generarExplicacion(d);
                     layer.bindPopup(`
-                        <div style="font-family:system-ui;min-width:200px">
+                        <div style="font-family:system-ui;min-width:240px;max-width:360px">
                             <div style="font-weight:500;font-size:14px;margin-bottom:4px">${nombre}</div>
                             <span style="background:${c.bg};color:${c.text};padding:2px 8px;border-radius:3px;font-size:12px;font-weight:500">${nivel.replace('_',' ')}</span>
                             <span style="font-size:20px;font-weight:500;color:${c.color};margin-left:8px">${prob}%</span>
                             ${antroInfo}
                             <hr style="margin:8px 0;border:none;border-top:1px solid #e0e0d8"/>
-                            <div style="font-size:12px;color:#73726c;line-height:1.8">
-                                Temp. max: <strong>${d.temp_max ?? '\u2014'}°C</strong><br/>
-                                Humedad min: <strong>${d.humedad_min ?? '\u2014'}%</strong><br/>
-                                Viento max: <strong>${d.viento_max ?? '\u2014'} km/h</strong><br/>
-                                Dias sin lluvia: <strong>${d.dias_sin_lluvia ?? '\u2014'}</strong><br/>
-                                Hotspots 24h: <strong>${d.hotspots_24h ?? 0}</strong>
+                            <div style="font-size:12px;color:#444;line-height:1.6;margin-bottom:8px">
+                                ${explicacion}
                             </div>
-                        </div>`);
+                            <div style="font-size:11px;color:#999;line-height:1.5;border-top:1px dashed #e0e0d8;padding-top:6px">
+                                Temp. max: ${d.temp_max ?? '\u2014'}°C · Humedad: ${d.humedad_min ?? '\u2014'}% · Viento: ${d.viento_max ?? '\u2014'} km/h · ${d.dias_sin_lluvia ?? '\u2014'}d sin lluvia · ${d.hotspots_24h ?? 0} hotspots
+                            </div>
+                        </div>`, {maxWidth: 380});
                 } else {
                     layer.bindPopup(`<div style="font-family:system-ui"><strong>${nombre}</strong><br/>Sin datos disponibles</div>`);
                 }
@@ -618,21 +695,21 @@
                     const nivel = d.nivel_riesgo || 'BAJO';
                     const c = NIVEL_COLORS[nivel] || NIVEL_COLORS.BAJO;
                     const prob = (d.prob_incendio * 100).toFixed(1);
+                    const explicacion = generarExplicacion(d);
                     layer.bindPopup(`
-                        <div style="font-family:system-ui;min-width:200px">
+                        <div style="font-family:system-ui;min-width:240px;max-width:360px">
                             <div style="font-weight:500;font-size:14px;margin-bottom:4px">${nombre}</div>
                             <span style="background:${c.bg};color:${c.text};padding:2px 8px;border-radius:3px;font-size:12px;font-weight:500">${nivel.replace('_',' ')}</span>
                             <span style="font-size:20px;font-weight:500;color:${c.color};margin-left:8px">${prob}%</span>
+                            <div style="font-size:10px;color:#1A7A6E;margin-top:4px">Prediccion: Modelo ML (Random Forest)</div>
                             <hr style="margin:8px 0;border:none;border-top:1px solid #e0e0d8"/>
-                            <div style="font-size:11px;color:#73726c;margin-top:4px">Prediccion: Modelo ML (Random Forest)</div>
-                            <div style="font-size:12px;color:#73726c;line-height:1.8;margin-top:4px">
-                                Temp. max: <strong>${d.temp_max ?? '\u2014'}°C</strong><br/>
-                                Humedad min: <strong>${d.humedad_min ?? '\u2014'}%</strong><br/>
-                                Viento max: <strong>${d.viento_max ?? '\u2014'} km/h</strong><br/>
-                                Dias sin lluvia: <strong>${d.dias_sin_lluvia ?? '\u2014'}</strong><br/>
-                                Hotspots 24h: <strong>${d.hotspots_24h ?? 0}</strong>
+                            <div style="font-size:12px;color:#444;line-height:1.6;margin-bottom:8px">
+                                ${explicacion}
                             </div>
-                        </div>`);
+                            <div style="font-size:11px;color:#999;line-height:1.5;border-top:1px dashed #e0e0d8;padding-top:6px">
+                                Temp. max: ${d.temp_max ?? '\u2014'}°C · Humedad: ${d.humedad_min ?? '\u2014'}% · Viento: ${d.viento_max ?? '\u2014'} km/h · ${d.dias_sin_lluvia ?? '\u2014'}d sin lluvia · ${d.hotspots_24h ?? 0} hotspots
+                            </div>
+                        </div>`, {maxWidth: 380});
                 } else {
                     layer.bindPopup(`<div style="font-family:system-ui"><strong>${nombre}</strong><br/>Sin datos ML disponibles</div>`);
                 }
@@ -699,12 +776,14 @@
             const antroTag = d._antro && d._antro.etiquetas.length
                 ? `<span class="antro-indicator">+${d._antro.puntos}pts ${d._antro.etiquetas[0]}</span>`
                 : '';
+            const resumen = generarExplicacionCorta(d);
             return `
                 <div class="card">
                     <div class="prob-circle" style="background:${c.bg};color:${c.text}">${prob}%</div>
                     <div class="info">
                         <div class="muni-name">${d.municipio}</div>
                         <span class="nivel-badge" style="background:${c.bg};color:${c.text}">${nivel.replace('_',' ')}</span>${antroTag}
+                        <div style="font-size:0.78rem;color:#555;margin-top:0.35rem;line-height:1.4">${resumen}</div>
                         <div class="detail-row">
                             <span>${d.temp_max ?? '—'}°C</span>
                             <span>${d.humedad_min ?? '—'}% hum</span>
