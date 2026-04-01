@@ -425,21 +425,110 @@ def predecir_ml(model_data: dict, features: dict, muni_info: dict) -> tuple[floa
 
 
 # ─── Paso 5: Alertas ────────────────────────────────────────────────────────
+def explicar_condiciones(f: dict) -> str:
+    """Genera texto explicativo en lenguaje sencillo para personal operativo."""
+    partes = []
+    dsl = f.get("dias_sin_lluvia", 0)
+    temp = f.get("temp_max") or 0
+    hum = f.get("humedad_min") or 100
+    viento = f.get("viento_max") or 0
+    hs = f.get("n_hotspots_24h", 0)
+
+    if dsl >= 14:
+        partes.append(f"Llevan {dsl} dias sin lluvia, la vegetacion esta muy seca y puede arder con facilidad.")
+    elif dsl >= 7:
+        partes.append(f"Van {dsl} dias sin lluvia. La vegetacion ha perdido humedad y es mas vulnerable al fuego.")
+    elif dsl >= 3:
+        partes.append(f"Han pasado {dsl} dias sin lluvia, la vegetacion aun conserva algo de humedad.")
+    else:
+        partes.append(f"Ha llovido recientemente ({dsl} dias sin lluvia), lo que reduce el riesgo.")
+
+    if temp >= 40:
+        partes.append(f"La temperatura maxima es de {temp}°C, extremadamente alta, lo que facilita la propagacion del fuego.")
+    elif temp >= 35:
+        partes.append(f"Se esperan {temp}°C de maxima, lo cual seca aun mas la vegetacion.")
+    elif temp >= 30:
+        partes.append(f"La temperatura es de {temp}°C, moderadamente alta.")
+
+    if hum <= 15:
+        partes.append(f"La humedad es de solo {hum}%, criticamente baja. Cualquier chispa puede iniciar fuego.")
+    elif hum <= 25:
+        partes.append(f"La humedad es de {hum}%, lo que indica un ambiente seco que favorece la ignicion.")
+    elif hum <= 40:
+        partes.append(f"Humedad de {hum}%, por debajo de lo ideal.")
+
+    if viento >= 50:
+        partes.append(f"Vientos fuertes de {viento} km/h que pueden propagar un incendio rapidamente.")
+    elif viento >= 30:
+        partes.append(f"Vientos de {viento} km/h, suficientes para avivar y extender un incendio.")
+
+    if hs >= 3:
+        partes.append(f"Se detectaron {hs} puntos de calor por satelite en las ultimas 24h, lo que sugiere fuego activo.")
+    elif hs >= 1:
+        partes.append(f"Se detecto {hs} punto de calor satelital en las ultimas 24h.")
+
+    return " ".join(partes)
+
+
 def generar_mensaje(pred: dict, contacto: dict) -> str:
     f = pred["features"]
+    explicacion = explicar_condiciones(f)
+    muni = pred.get("muni_nombre", pred["cve_muni"])
+    nivel = pred["nivel"].replace("_", " ")
+    prob = pred["prob"]
+
     return (
-        f"ALERTA DE INCENDIO — {pred.get('muni_nombre', pred['cve_muni'])}, Nuevo León\n\n"
+        f"ALERTA DE INCENDIO — {muni}, Nuevo Leon\n\n"
         f"Estimado(a) {contacto.get('nombre', 'Funcionario')},\n\n"
-        f"Nivel de riesgo: {pred['nivel']} (probabilidad: {pred['prob']:.0%})\n\n"
-        f"Condiciones:\n"
-        f"- Temp máxima: {f.get('temp_max', 'N/D')}°C\n"
-        f"- Humedad mínima: {f.get('humedad_min', 'N/D')}%\n"
-        f"- Viento máximo: {f.get('viento_max', 'N/D')} km/h\n"
-        f"- Días sin lluvia: {f.get('dias_sin_lluvia', 'N/D')}\n"
+        f"Nivel de riesgo: {nivel} (probabilidad: {prob:.0%})\n\n"
+        f"¿Por que este nivel?\n"
+        f"{explicacion}\n\n"
+        f"Datos del dia:\n"
+        f"- Temp. maxima: {f.get('temp_max', 'N/D')}°C\n"
+        f"- Humedad minima: {f.get('humedad_min', 'N/D')}%\n"
+        f"- Viento maximo: {f.get('viento_max', 'N/D')} km/h\n"
+        f"- Dias sin lluvia: {f.get('dias_sin_lluvia', 'N/D')}\n"
         f"- Hotspots activos 24h: {f.get('n_hotspots_24h', 0)}\n\n"
-        f"Se recomienda activar protocolos preventivos.\n\n"
-        f"— Sistema de Predicción de Incendios, Vocacion Ambiental A.C."
+        f"Se recomienda activar protocolos preventivos.\n"
+        f"Dashboard: https://incendios-nl.netlify.app\n\n"
+        f"— Sistema de Prediccion de Incendios, Vocacion Ambiental A.C."
     )
+
+
+def generar_resumen_diario(predicciones: list) -> str:
+    """Genera un resumen diario breve de todos los municipios para WhatsApp."""
+    fecha = date.today().isoformat()
+    niveles = {"EXTREMO": [], "MUY_ALTO": [], "ALTO": [], "MEDIO": [], "BAJO": []}
+    for p in predicciones:
+        niveles.setdefault(p["nivel"], []).append(p["muni_nombre"])
+
+    lineas = [f"REPORTE DIARIO DE INCENDIOS — Nuevo Leon\nFecha: {fecha}\n"]
+
+    for nivel in ["EXTREMO", "MUY_ALTO", "ALTO", "MEDIO", "BAJO"]:
+        munis = niveles.get(nivel, [])
+        if not munis:
+            continue
+        emoji = {"EXTREMO": "🔴", "MUY_ALTO": "🟠", "ALTO": "🟡", "MEDIO": "🔵", "BAJO": "🟢"}
+        label = nivel.replace("_", " ")
+        lineas.append(f"{emoji.get(nivel, '')} {label} ({len(munis)}): {', '.join(munis[:8])}")
+        if len(munis) > 8:
+            lineas[-1] += f" y {len(munis)-8} mas"
+
+    # Top 3 con más riesgo
+    top3 = sorted(predicciones, key=lambda p: p["prob"], reverse=True)[:3]
+    if top3:
+        lineas.append("\nMunicipios con mayor riesgo:")
+        for p in top3:
+            f = p["features"]
+            lineas.append(
+                f"  {p['muni_nombre']}: {p['prob']:.0%} — "
+                f"{f.get('temp_max', '?')}°C, {f.get('humedad_min', '?')}% hum, "
+                f"{f.get('dias_sin_lluvia', '?')}d sin lluvia"
+            )
+
+    lineas.append(f"\nDashboard: https://incendios-nl.netlify.app")
+    lineas.append("— Vocacion Ambiental A.C.")
+    return "\n".join(lineas)
 
 
 def enviar_email(destinatario: str, mensaje: str, pred: dict):
@@ -463,6 +552,34 @@ def enviar_email(destinatario: str, mensaje: str, pred: dict):
     )
     resp.raise_for_status()
     log.info(f"Email enviado a {destinatario}")
+    return True
+
+
+def enviar_whatsapp(telefono: str, mensaje: str):
+    """Envía mensaje por WhatsApp usando Twilio."""
+    sid = os.getenv("TWILIO_ACCOUNT_SID")
+    token = os.getenv("TWILIO_AUTH_TOKEN")
+    from_num = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")  # Sandbox default
+    if not all([sid, token]):
+        log.warning("Twilio no configurado para WhatsApp")
+        return False
+
+    # Asegurar formato whatsapp:
+    to_num = telefono if telefono.startswith("whatsapp:") else f"whatsapp:{telefono}"
+
+    # WhatsApp tiene límite de 1600 caracteres
+    wa_msg = mensaje[:1550] + "..." if len(mensaje) > 1600 else mensaje
+
+    resp = requests.post(
+        f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
+        data={"To": to_num, "From": from_num, "Body": wa_msg},
+        auth=(sid, token),
+        timeout=30,
+    )
+    if not resp.ok:
+        log.error(f"Error WhatsApp a {telefono}: {resp.status_code} — {resp.text[:200]}")
+        return False
+    log.info(f"WhatsApp enviado a {telefono}")
     return True
 
 
@@ -705,9 +822,47 @@ def main():
         except Exception as e:
             log.error(f"Error upsert predicciones: {e}")
 
-    # Paso 6: Alertas (se activan si CUALQUIERA de los dos modelos indica riesgo alto)
+    # Paso 6: Resumen diario por WhatsApp (se envía siempre, no solo con alertas)
+    resumen = generar_resumen_diario(predicciones)
+    resumen_enviado = False
+    try:
+        contactos_resumen = sb.select("contactos", {
+            "select": "*",
+            "activo": "eq.true",
+            "canal_pref": "eq.whatsapp",
+        })
+    except Exception:
+        contactos_resumen = []
+
+    for c in contactos_resumen:
+        tel = c.get("telefono")
+        if tel:
+            try:
+                if enviar_whatsapp(tel, resumen):
+                    resumen_enviado = True
+                    try:
+                        sb.insert("alertas_enviadas", [{
+                            "contacto_id": c["id"],
+                            "canal": "whatsapp",
+                            "status": "sent",
+                            "mensaje": resumen[:500],
+                            "sent_at": datetime.now().isoformat(),
+                        }])
+                    except Exception:
+                        pass
+            except Exception as e:
+                log.error(f"Error resumen WhatsApp a {c.get('nombre', tel)}: {e}")
+
+    if resumen_enviado:
+        log.info(f"Resumen diario WhatsApp enviado a {len(contactos_resumen)} contactos")
+    elif contactos_resumen:
+        log.warning("No se pudo enviar resumen WhatsApp")
+    else:
+        log.info("Sin contactos WhatsApp para resumen diario")
+
+    # Paso 7: Alertas individuales (municipios con riesgo ALTO+)
     niveles_alerta = {"ALTO", "MUY_ALTO", "EXTREMO"}
-    alertas_set = {}  # cve -> pred con nivel más alto
+    alertas_set = {}
     for p in todas_predicciones:
         if p["nivel"] in niveles_alerta:
             cve = p["cve_muni"]
@@ -738,6 +893,9 @@ def main():
                     if canal == "email" and c.get("email"):
                         enviar_email(c["email"], msg, pred)
                         status = "sent"
+                    elif canal == "whatsapp" and c.get("telefono"):
+                        enviar_whatsapp(c["telefono"], msg)
+                        status = "sent"
                     elif canal == "sms" and c.get("telefono"):
                         enviar_sms(c["telefono"], msg)
                         status = "sent"
@@ -750,7 +908,7 @@ def main():
                         "contacto_id": c["id"],
                         "canal": canal,
                         "status": status,
-                        "mensaje": msg,
+                        "mensaje": msg[:500],
                         "sent_at": datetime.now().isoformat(),
                     }])
                 except Exception:
