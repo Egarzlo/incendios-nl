@@ -44,7 +44,11 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 NL_BBOX = {"west": -101.21, "south": 23.16, "east": -98.42, "north": 27.80}
 NL_BBOX_STR = f"{NL_BBOX['west']},{NL_BBOX['south']},{NL_BBOX['east']},{NL_BBOX['north']}"
 
-MUNICIPIOS_SHP = "data/municipios_nl.shp"
+MUNICIPIOS_SHP = "data/2025_1_19_MUN/2025_1_19_MUN.shp"
+MUNICIPIOS_SHP_CRS = (
+    "+proj=lcc +lat_1=17.5 +lat_2=29.5 +lat_0=12 +lon_0=-102 "
+    "+x_0=2500000 +y_0=0 +ellps=GRS80 +units=m +no_defs"
+)
 
 METEO_DAILY_VARS = [
     "temperature_2m_max",
@@ -256,55 +260,94 @@ def safe_float(lst, idx):
 
 
 # ─── Paso 3: Geocodificar hotspots a municipios ─────────────────────────────
-def geocode_hotspots_simple(hotspots: list[dict], municipios: list[dict]) -> list[dict]:
-    from math import radians, sin, cos, sqrt, atan2
+def cargar_municipios_shapely() -> list[tuple]:
+    """
+    Carga el shapefile oficial INEGI (Marco Geoestadístico 2025) y reproyecta
+    cada polígono de LCC México ITRF 2008 a WGS84 (EPSG:4326).
 
-    def haversine(lat1, lon1, lat2, lon2):
-        R = 6371
-        dlat = radians(lat2 - lat1)
-        dlon = radians(lon2 - lon1)
-        a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
-        return R * 2 * atan2(sqrt(a), sqrt(1 - a))
+    Retorna: lista de (cve_muni, shapely.Polygon/MultiPolygon en WGS84).
+
+    Aborta si el shapefile no se puede cargar — no hay fallback impreciso.
+    """
+    import shapefile  # pyshp
+    from shapely.geometry import shape
+    from shapely.ops import transform as shp_transform
+    from pyproj import Transformer
+
+    if not os.path.exists(MUNICIPIOS_SHP):
+        raise FileNotFoundError(
+            f"Shapefile municipal no encontrado en {MUNICIPIOS_SHP}. "
+            "Requerido para geocodificación correcta — abortando ETL."
+        )
+
+    tr = Transformer.from_crs(MUNICIPIOS_SHP_CRS, "EPSG:4326", always_xy=True)
+    reproject = lambda x, y, z=None: tr.transform(x, y)
+
+    sf = shapefile.Reader(MUNICIPIOS_SHP, encoding="cp1252")
+    field_names = [f[0] for f in sf.fields[1:]]
+    idx_cve = field_names.index("CVE_MUN")
+    idx_ent = field_names.index("CVE_ENT") if "CVE_ENT" in field_names else None
+
+    municipios_geom = []
+    for sr in sf.shapeRecords():
+        rec = sr.record
+        if idx_ent is not None and rec[idx_ent] != "19":
+            continue  # defensivo: solo NL
+        cve = str(rec[idx_cve]).zfill(3)
+        geom_lcc = shape(sr.shape.__geo_interface__)
+        geom_wgs = shp_transform(reproject, geom_lcc)
+        municipios_geom.append((cve, geom_wgs))
+
+    if len(municipios_geom) != 51:
+        raise ValueError(
+            f"Se esperaban 51 municipios de NL, se cargaron {len(municipios_geom)}. "
+            "Revisa el shapefile."
+        )
+
+    log.info(f"Shapefile cargado: {len(municipios_geom)} municipios de NL (INEGI 2025.1)")
+    return municipios_geom
+
+
+def geocode_hotspots_shapely(hotspots: list[dict], municipios_geom: list[tuple]) -> list[dict]:
+    """
+    Asigna cada hotspot al municipio cuyo polígono lo contiene.
+    Los hotspots fuera de NL se descartan (no se asignan al centroide más cercano).
+    """
+    from shapely.geometry import Point
+    from shapely.strtree import STRtree
+
+    geoms = [g for _, g in municipios_geom]
+    cves = [c for c, _ in municipios_geom]
+    tree = STRtree(geoms)
 
     geocoded = []
+    fuera = 0
     for h in hotspots:
-        best_dist = float("inf")
-        best_cve = None
-        for m in municipios:
-            d = haversine(h["latitude"], h["longitude"], m["lat_centroide"], m["lon_centroide"])
-            if d < best_dist:
-                best_dist = d
-                best_cve = m["cve_muni"]
-        if best_cve and best_dist < 100:
-            h["cve_muni"] = best_cve
-            geocoded.append(h)
+        pt = Point(h["longitude"], h["latitude"])
+        candidatos = tree.query(pt)  # índices de polígonos cuyo bbox intersecta el punto
+        asignado = False
+        for idx in candidatos:
+            if geoms[int(idx)].covers(pt):
+                h2 = dict(h)
+                h2["cve_muni"] = cves[int(idx)]
+                geocoded.append(h2)
+                asignado = True
+                break
+        if not asignado:
+            fuera += 1
 
-    log.info(f"Geocodificación simple: {len(geocoded)}/{len(hotspots)} asignados")
+    total = len(hotspots)
+    pct_fuera = (fuera / total * 100) if total else 0
+    log.info(
+        f"Geocodificación: {len(geocoded)}/{total} hotspots dentro de NL, "
+        f"{fuera} descartados fuera del estado ({pct_fuera:.1f}%)"
+    )
+    if total >= 10 and pct_fuera > 50:
+        log.warning(
+            f"⚠️ Más del 50% de hotspots cayeron fuera de NL ({fuera}/{total}). "
+            "Revisar cobertura del bbox FIRMS o calidad de datos."
+        )
     return geocoded
-
-
-def geocode_hotspots_geopandas(hotspots: list[dict]) -> list[dict]:
-    try:
-        import geopandas as gpd
-        from shapely.geometry import Point
-
-        gdf = gpd.read_file(MUNICIPIOS_SHP).to_crs(epsg=4326)
-        points = [Point(h["longitude"], h["latitude"]) for h in hotspots]
-        hotspots_gdf = gpd.GeoDataFrame(hotspots, geometry=points, crs="EPSG:4326")
-        joined = gpd.sjoin(hotspots_gdf, gdf, how="inner", predicate="within")
-
-        geocoded = []
-        for _, row in joined.iterrows():
-            h = {k: row[k] for k in ["latitude", "longitude", "brightness", "frp",
-                                      "confidence", "satellite", "source", "detected_at"]}
-            h["cve_muni"] = str(row.get("CVE_MUN", row.get("CVEGEO", ""))).zfill(3)[-3:]
-            geocoded.append(h)
-
-        log.info(f"Geocodificación precisa: {len(geocoded)}/{len(hotspots)} dentro de NL")
-        return geocoded
-    except Exception as e:
-        log.warning(f"Shapefile no disponible ({e}), usando geocodificación simple")
-        return None
 
 
 # ─── Paso 4: Features y modelo de riesgo ────────────────────────────────────
@@ -634,18 +677,34 @@ def main():
     # Paso 2
     meteo_data = fetch_open_meteo(municipios_db, days_back=7)
 
-    # Paso 3
+    # Paso 3: Geocodificación estricta con shapefile INEGI oficial
+    try:
+        municipios_geom = cargar_municipios_shapely()
+    except Exception as e:
+        log.error(f"No se pudo cargar shapefile municipal: {e}")
+        return
+
     hotspots_geo = []
     if hotspots_raw:
-        result = geocode_hotspots_geopandas(hotspots_raw) if os.path.exists(MUNICIPIOS_SHP) else None
-        if result is None:
-            hotspots_geo = geocode_hotspots_simple(hotspots_raw, municipios_db)
-        else:
-            hotspots_geo = result
+        hotspots_geo = geocode_hotspots_shapely(hotspots_raw, municipios_geom)
 
-    hotspots_por_muni = {}
+    # Indexar hotspots por municipio, separando los de las últimas 24h
+    # (el fetch cubre 48h para robustez; el feature sólo cuenta las últimas 24h)
+    from datetime import timezone as _tz
+    corte_24h = datetime.now(_tz.utc) - timedelta(hours=24)
+    hotspots_por_muni = {}       # TODOS los hotspots (para upsert a BD)
+    hotspots_24h_por_muni = {}   # SÓLO últimas 24h (para feature n_hotspots_24h)
     for h in hotspots_geo:
-        hotspots_por_muni.setdefault(h["cve_muni"], []).append(h)
+        cve = h["cve_muni"]
+        hotspots_por_muni.setdefault(cve, []).append(h)
+        try:
+            ts = datetime.fromisoformat(h["detected_at"].replace("Z", "+00:00"))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=_tz.utc)
+            if ts >= corte_24h:
+                hotspots_24h_por_muni.setdefault(cve, []).append(h)
+        except Exception:
+            pass  # si no parsea, no lo contamos en 24h
 
     # Paso 4: calcular días sin lluvia desde BD (usa histórico completo)
     dias_sin_lluvia_db = {}
@@ -684,7 +743,7 @@ def main():
 
         clima_hoy = clima_muni[-1]
         dsl = dias_sin_lluvia_db.get(cve, calcular_dias_sin_lluvia(clima_muni))
-        hs_muni = hotspots_por_muni.get(cve, [])
+        hs_muni_24h = hotspots_24h_por_muni.get(cve, [])
 
         features = {
             "cve_muni": cve,
@@ -696,8 +755,8 @@ def main():
             "precipitacion": clima_hoy.get("precipitacion"),
             "et0": clima_hoy.get("et0"),
             "dias_sin_lluvia": dsl,
-            "n_hotspots_24h": len(hs_muni),
-            "frp_max": max((h["frp"] for h in hs_muni), default=0),
+            "n_hotspots_24h": len(hs_muni_24h),
+            "frp_max": max((h["frp"] for h in hs_muni_24h), default=0),
             "elevacion_media": info.get("elevacion_media", 0),
             "pendiente_media": info.get("pendiente_media", 0),
         }

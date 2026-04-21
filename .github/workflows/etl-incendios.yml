@@ -30,13 +30,17 @@ jobs:
       - name: Instalar dependencias Python
         run: pip install -r requirements.txt
 
-      - name: Verificar shapefile de municipios
+      - name: Verificar shapefile INEGI de municipios (obligatorio)
         run: |
-          if [ ! -f "data/municipios_nl.shp" ]; then
-            echo "⚠️ Shapefile no encontrado, usando geocodificación por bbox"
-          else
-            echo "✅ Shapefile encontrado: $(ls -la data/municipios_nl.*)"
-          fi
+          SHP="data/2025_1_19_MUN/2025_1_19_MUN.shp"
+          for ext in shp shx dbf prj; do
+            f="data/2025_1_19_MUN/2025_1_19_MUN.$ext"
+            if [ ! -f "$f" ]; then
+              echo "❌ Falta archivo requerido: $f"
+              exit 1
+            fi
+          done
+          echo "✅ Shapefile INEGI 2025.1 completo: $(ls -la data/2025_1_19_MUN/)"
 
       - name: Ejecutar ETL de incendios
         env:
