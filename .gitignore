@@ -9,4 +9,6 @@ etl_incendios.log
 *.prj
 *.cpg
 !data/.gitkeep
+!data/2025_1_19_MUN/
+!data/2025_1_19_MUN/*
 data/*.csv
