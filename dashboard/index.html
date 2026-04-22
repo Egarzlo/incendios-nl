@@ -901,7 +901,8 @@
         document.getElementById('stat-alerta-ml').textContent = alertas.length;
         const totalHotspots = dataML.reduce((s,d) => s+(d.hotspots_24h||0), 0);
         document.getElementById('stat-hotspots-ml').textContent = totalHotspots;
-        document.getElementById('stat-modelo').textContent = 'RF v1';
+        const mlVer = dataML[0] && dataML[0].modelo_version ? dataML[0].modelo_version.replace('ml_','') : '?';
+        document.getElementById('stat-modelo').textContent = 'RF ' + mlVer;
         if (dataRules.length && dataML.length) {
             const rulesMap = {};
             dataRules.forEach(d => { rulesMap[d.cve_muni] = nivelFor(probFor(d, 'mapa')); });
@@ -985,9 +986,13 @@
             const rawData = await resp.json();
             if (!rawData.length) { document.getElementById('fecha-display').textContent = 'Sin datos disponibles'; return; }
 
-            // 2) Separar por modelo_version
+            // 2) Separar por modelo_version. Para ML preferimos la mas reciente
+            //    (ml_v2 sobre ml_v1) si ambas existen para la misma fecha maxima.
             const dataRules = rawData.filter(d => d.modelo_version === 'rules_v1' || !d.modelo_version);
-            const dataML    = rawData.filter(d => d.modelo_version === 'ml_v1');
+            const mlRows    = rawData.filter(d => (d.modelo_version || '').startsWith('ml_'));
+            const mlVersions = [...new Set(mlRows.map(d => d.modelo_version))].sort().reverse();
+            const mlLatest  = mlVersions[0] || '';
+            const dataML    = mlLatest ? mlRows.filter(d => d.modelo_version === mlLatest) : [];
             allData   = dataRules.length ? dataRules : rawData;
             allDataML = dataML;
 

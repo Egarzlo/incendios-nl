@@ -1,6 +1,6 @@
 {
   "model_name": "Random Forest",
-  "version": "ml_v1",
+  "version": "ml_v2",
   "features": [
     "temp_max",
     "temp_min",
@@ -9,24 +9,29 @@
     "precipitacion",
     "et0",
     "dias_sin_lluvia",
+    "dias_sin_lluvia_30d",
     "mes",
     "dia_del_ano",
     "lat",
     "lon",
-    "elevacion"
+    "elevacion",
+    "ecoregion"
   ],
-  "threshold": 0.897723,
+  "threshold": 0.844877,
   "metrics": {
-    "roc_auc": 0.8697,
-    "pr_auc": 0.0166,
-    "f1": 0.0599,
-    "recall": 0.0714
+    "roc_auc": 0.9011,
+    "pr_auc": 0.1149,
+    "f1": 0.2051,
+    "recall": 0.3011
   },
   "training_period": "2015-2022",
   "test_period": "2023-2024",
-  "n_train": 149022,
-  "n_test": 37281,
-  "n_fires_train": 328,
-  "n_fires_test": 70,
-  "class_ratio": "453:1"
+  "n_train": 148292,
+  "n_test": 36550,
+  "n_fires_train": 1997,
+  "n_fires_test": 455,
+  "class_ratio": "73:1",
+  "target": "hubo_incendio_ventana (etiqueta \u00b13d + duracion)",
+  "training_source": "Open-Meteo Archive (ERA5) historico real",
+  "notes": "Reentrenado con clima real; reemplaza ml_v1 entrenado con clima sintetico."
 }
