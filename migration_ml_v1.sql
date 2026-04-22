@@ -1,6 +1,11 @@
 -- ============================================================================
--- Migración: Soporte para modelo ML (v1)
--- Ejecutar en Supabase SQL Editor
+-- [HISTORICO - YA APLICADO EN PRODUCCION] Migracion: soporte para modelo ML v1
+-- Agrega UNIQUE(muni, fecha, modelo_version) y las vistas v_riesgo_actual y
+-- v_comparativa_modelos. Ya incorporado directamente en schema.sql, por lo
+-- que este script NO debe re-ejecutarse en nuevos deploys. Se conserva como
+-- referencia historica de la migracion.
+-- Validado 2026-04-22: 1,173 pares (muni,fecha) con ambas versiones, sin
+-- duplicados por (muni,fecha,modelo_version).
 -- ============================================================================
 
 -- 1. Reemplazar el UNIQUE constraint en predicciones para incluir modelo_version
