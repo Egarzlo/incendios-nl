@@ -136,6 +136,63 @@
         }
         .factor-toggle-badge.off { background:#eee; color:#777; }
 
+        /* Panel de hotspots recientes */
+        .hotspots-panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-top: 1rem;
+            overflow: hidden;
+        }
+        .hotspots-panel-header {
+            padding: 0.9rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 0.75rem; flex-wrap: wrap;
+        }
+        .hotspots-panel-header h3 { font-size: 0.95rem; font-weight: 500; color: var(--text); margin: 0; }
+        .hotspots-panel-header .subtitle { font-size: 0.75rem; color: var(--text-secondary); }
+        .hotspots-panel-body { padding: 0.25rem 0; }
+        .hotspots-empty { padding: 1.5rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem; }
+
+        .hs-muni-group { padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); }
+        .hs-muni-group:first-child { border-top: none; }
+        .hs-muni-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap;
+        }
+        .hs-muni-name { font-weight: 500; font-size: 0.92rem; color: var(--text); }
+        .hs-count-badge {
+            font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 10px;
+            background: var(--teal-light); color: var(--teal); font-weight: 500;
+        }
+        .hs-inference {
+            font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 10px;
+            font-weight: 500;
+        }
+        .hs-inference.same   { background: #D8F3DC; color: #1B4332; }
+        .hs-inference.diff   { background: #FFE0CC; color: #7A3300; }
+        .hs-inference.ambig  { background: #eee;    color: #666; }
+
+        .hs-detection-list { display: flex; flex-direction: column; gap: 0.3rem; }
+        .hs-detection {
+            display: grid;
+            grid-template-columns: 140px 75px 1fr auto;
+            gap: 0.65rem;
+            font-size: 0.78rem;
+            color: #444;
+            padding: 0.25rem 0;
+            align-items: baseline;
+        }
+        .hs-detection .sat  { font-weight: 500; color: var(--teal); }
+        .hs-detection .hora { font-variant-numeric: tabular-nums; color: #555; }
+        .hs-detection .coord{ color: #777; font-family: monospace; font-size: 0.72rem; }
+        .hs-detection .frp  { color: #7A3300; font-weight: 500; text-align: right; }
+        @media (max-width: 620px) {
+            .hs-detection { grid-template-columns: 1fr 1fr; }
+            .hs-detection .coord { grid-column: span 2; }
+        }
+
         .map-container {
             background: var(--card);
             border: 1px solid var(--border);
@@ -298,6 +355,7 @@
                     <div class="legend-item"><div class="legend-dot" style="background:var(--extremo)"></div>Extremo</div>
                 </div>
             </div>
+            <div id="hotspots-panel" class="hotspots-panel"></div>
         </div>
 
         <div class="section" id="sec-ml">
@@ -926,6 +984,9 @@
                 if (mapMLInitialized) plotChoroplethML(allDataML);
             }
 
+            // Panel de detecciones satelitales 24h (independiente del modelo)
+            loadHotspotsRecientes();
+
         } catch (err) {
             document.getElementById('fecha-display').textContent = 'Error de conexion';
             console.error('Error cargando datos:', err);
@@ -934,6 +995,151 @@
                     <div class="number" style="font-size:1rem">Error: ${err.message}</div>
                     <div class="label">Verifica la conexion a Supabase</div>
                 </div>`;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PANEL DE DETECCIONES SATELITALES (hotspots 24h, por municipio)
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Formato amigable para la columna source del FIRMS. */
+    function satLabel(source, satellite) {
+        const map = {
+            'VIIRS_NOAA20_NRT': 'VIIRS NOAA-20',
+            'VIIRS_NOAA21_NRT': 'VIIRS NOAA-21',
+            'VIIRS_SNPP_NRT':   'VIIRS Suomi NPP',
+            'MODIS_NRT': 'MODIS' + (satellite ? ' ' + satellite : ''),
+        };
+        return map[source] || source;
+    }
+
+    /** Haversine km entre dos coords WGS84. */
+    function kmBetween(la1, lo1, la2, lo2) {
+        const R = 6371;
+        const dLat = (la2 - la1) * Math.PI / 180;
+        const dLon = (lo2 - lo1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    /** Deduce si las detecciones de un municipio son probablemente el mismo
+     *  incendio. Simple: max spread espacial de los pares.
+     *  <=2km -> same, >5km -> diff, intermedio -> ambig. */
+    function inferenciaIncendio(detecciones) {
+        if (detecciones.length < 2) return null;
+        let maxKm = 0;
+        for (let i = 0; i < detecciones.length; i++) {
+            for (let j = i+1; j < detecciones.length; j++) {
+                const d = kmBetween(
+                    detecciones[i].latitude, detecciones[i].longitude,
+                    detecciones[j].latitude, detecciones[j].longitude
+                );
+                if (d > maxKm) maxKm = d;
+            }
+        }
+        if (maxKm <= 2)  return { cls:'same',  text:'Probablemente el mismo incendio (' + maxKm.toFixed(1) + ' km entre detecciones)' };
+        if (maxKm >  5)  return { cls:'diff',  text:'Incendios distintos (' + maxKm.toFixed(1) + ' km entre detecciones)' };
+        return { cls:'ambig', text:'Distancia intermedia (' + maxKm.toFixed(1) + ' km) — revisar en campo' };
+    }
+
+    async function loadHotspotsRecientes() {
+        const container = document.getElementById('hotspots-panel');
+        if (!container) return;
+
+        try {
+            // Ultimas 48h (cubre retraso tipico NRT de FIRMS de hasta ~24h);
+            // embed de municipios para traer nombre y cve.
+            const desde = new Date(Date.now() - 48*3600*1000).toISOString();
+            const url = `${SUPABASE_URL}/rest/v1/hotspots`
+                      + `?select=id,latitude,longitude,brightness,frp,confidence,source,satellite,detected_at,`
+                      + `municipios(cve_muni,nombre)`
+                      + `&detected_at=gte.${encodeURIComponent(desde)}`
+                      + `&order=detected_at.desc`;
+            const resp = await fetch(url, {
+                headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const rows = await resp.json();
+
+            if (!rows.length) {
+                container.innerHTML = `
+                    <div class="hotspots-panel-header">
+                        <div><h3>Detecciones satelitales — últimas 48h</h3>
+                        <div class="subtitle">4 fuentes NRT: VIIRS NOAA-20, NOAA-21, Suomi NPP, MODIS Terra/Aqua</div></div>
+                        <span class="hs-count-badge">0 detecciones</span>
+                    </div>
+                    <div class="hotspots-empty">Sin detecciones en las últimas 48 horas.</div>`;
+                return;
+            }
+
+            // Agrupar por cve_muni
+            const porMuni = {};
+            rows.forEach(r => {
+                const cve = r.municipios ? r.municipios.cve_muni : '---';
+                const nom = r.municipios ? r.municipios.nombre : 'Sin municipio';
+                if (!porMuni[cve]) porMuni[cve] = { nombre: nom, detecciones: [] };
+                porMuni[cve].detecciones.push(r);
+            });
+
+            // Orden: municipios con mas detecciones primero, luego por muni mas reciente
+            const grupos = Object.entries(porMuni).map(([cve, g]) => ({ cve, ...g }));
+            grupos.sort((a, b) => {
+                if (b.detecciones.length !== a.detecciones.length) return b.detecciones.length - a.detecciones.length;
+                return new Date(b.detecciones[0].detected_at) - new Date(a.detecciones[0].detected_at);
+            });
+
+            const totalDet = rows.length;
+            const totalMunis = grupos.length;
+
+            const htmlGrupos = grupos.map(g => {
+                // Orden cronologico dentro del muni
+                const dets = [...g.detecciones].sort((a,b) => new Date(a.detected_at) - new Date(b.detected_at));
+                const inf = inferenciaIncendio(dets);
+                const infTag = inf
+                    ? `<span class="hs-inference ${inf.cls}">${inf.text}</span>`
+                    : '';
+
+                const detHtml = dets.map(d => {
+                    const hora = new Date(d.detected_at).toLocaleString('es-MX', {
+                        timeZone: 'America/Monterrey',
+                        day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
+                    });
+                    const frp = d.frp != null ? d.frp.toFixed(1) + ' MW' : '—';
+                    const coord = `${d.latitude.toFixed(3)}, ${d.longitude.toFixed(3)}`;
+                    return `<div class="hs-detection">
+                        <span class="sat">${satLabel(d.source, d.satellite)}</span>
+                        <span class="hora">${hora}</span>
+                        <span class="coord">${coord}</span>
+                        <span class="frp">${frp}</span>
+                    </div>`;
+                }).join('');
+
+                return `<div class="hs-muni-group">
+                    <div class="hs-muni-head">
+                        <div>
+                            <span class="hs-muni-name">${g.nombre}</span>
+                            ${infTag}
+                        </div>
+                        <span class="hs-count-badge">${dets.length} ${dets.length === 1 ? 'detección' : 'detecciones'}</span>
+                    </div>
+                    <div class="hs-detection-list">${detHtml}</div>
+                </div>`;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="hotspots-panel-header">
+                    <div><h3>Detecciones satelitales — últimas 48h</h3>
+                    <div class="subtitle">${totalDet} ${totalDet===1?'detección':'detecciones'} en ${totalMunis} ${totalMunis===1?'municipio':'municipios'}. Fuentes: VIIRS NOAA-20/NOAA-21/Suomi NPP + MODIS Terra/Aqua</div></div>
+                </div>
+                <div class="hotspots-panel-body">${htmlGrupos}</div>`;
+
+        } catch (err) {
+            console.error('Error cargando hotspots recientes:', err);
+            container.innerHTML = `
+                <div class="hotspots-panel-header">
+                    <h3>Detecciones satelitales — últimas 48h</h3>
+                </div>
+                <div class="hotspots-empty" style="color:var(--muy-alto)">Error al cargar: ${err.message}</div>`;
         }
     }
 
