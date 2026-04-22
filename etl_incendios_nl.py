@@ -60,6 +60,75 @@ METEO_DAILY_VARS = [
     "et0_fao_evapotranspiration",
 ]
 
+# ─── Factor antropogenico: ecorregion Vocacion Ambiental A.C. + actividades por municipio ────
+# La ecorregion (R1-R5) deriva del mapa oficial de ecorregiones de Vocacion Ambiental A.C. y
+# funciona como proxy del comportamiento del fuego por tipo de combustible.
+# Las actividades son capas humanas que modulan el riesgo de ignicion segun
+# la temporada. Ver README / documentacion para la justificacion de pesos.
+ZONA_BY_CVE = {
+    "001": ("R1", []),
+    "002": ("R1", []),
+    "003": ("R1", []),
+    "004": ("R3", ["citrica", "turismo_alto"]),
+    "005": ("R1", []),
+    "006": ("R1", ["amm_nucleo"]),
+    "007": ("R5", ["ganaderia_ext"]),
+    "008": ("R1", ["turismo_alto"]),
+    "009": ("R3", ["citrica", "amm_periurbano", "turismo_medio"]),
+    "010": ("R1", ["amm_periurbano"]),
+    "011": ("R1", []),
+    "012": ("R1", ["amm_periurbano"]),
+    "013": ("R1", []),
+    "014": ("R5", ["ganaderia_ext"]),
+    "015": ("R1", []),
+    "016": ("R1", []),
+    "017": ("R4", ["ganaderia_ext", "turismo_alto"]),
+    "018": ("R1", ["amm_nucleo", "frontera_sierra"]),
+    "019": ("R3", ["amm_nucleo", "frontera_sierra"]),
+    "020": ("R1", []),
+    "021": ("R1", ["amm_nucleo"]),
+    "022": ("R3", ["citrica"]),
+    "023": ("R1", []),
+    "024": ("R5", ["ganaderia_ext"]),
+    "025": ("R1", ["amm_periurbano"]),
+    "026": ("R1", ["amm_nucleo"]),
+    "027": ("R1", []),
+    "028": ("R1", []),
+    "029": ("R3", ["citrica"]),
+    "030": ("R4", ["turismo_medio"]),
+    "031": ("R1", ["amm_nucleo"]),
+    "032": ("R1", []),
+    "033": ("R3", ["citrica", "turismo_medio"]),
+    "034": ("R1", []),
+    "035": ("R1", []),
+    "036": ("R5", ["ganaderia_ext"]),
+    "037": ("R2", []),
+    "038": ("R3", ["citrica"]),
+    "039": ("R3", ["amm_nucleo", "frontera_sierra"]),
+    "040": ("R1", []),
+    "041": ("R1", ["amm_periurbano"]),
+    "042": ("R1", []),
+    "043": ("R4", ["turismo_medio"]),
+    "044": ("R1", []),
+    "045": ("R1", ["amm_periurbano"]),
+    "046": ("R1", ["amm_nucleo"]),
+    "047": ("R1", []),
+    "048": ("R3", ["amm_nucleo", "frontera_sierra"]),
+    "049": ("R3", ["turismo_alto", "frontera_sierra"]),
+    "050": ("R1", []),
+    "051": ("R1", []),
+}
+
+# Pts base por ecorregion segun evento calendario
+BASE_POR_REGION = {
+    "semana_santa":      {"R1": 4, "R2": 2, "R3": 6,  "R4": 10, "R5": 5},
+    "quemas_agricolas":  {"R1": 5, "R2": 2, "R3": 10, "R4": 4,  "R5": 8},
+    "residuos_cosecha":  {"R1": 3, "R2": 1, "R3": 5,  "R4": 2,  "R5": 4},
+    "vacaciones_verano": {"R1": 2, "R2": 1, "R3": 4,  "R4": 8,  "R5": 3},
+    "navidad":           {"R1": 4, "R2": 3, "R3": 5,  "R4": 5,  "R5": 4},
+}
+FACTOR_CAP = 20  # cap total de puntos
+
 
 # ─── Supabase Client (lightweight, no SDK dependency issues) ────────────────
 class SupabaseClient:
@@ -348,6 +417,114 @@ def geocode_hotspots_shapely(hotspots: list[dict], municipios_geom: list[tuple])
             "Revisar cobertura del bbox FIRMS o calidad de datos."
         )
     return geocoded
+
+
+# ─── Factor antropogenico ──────────────────────────────────────────────────
+def _easter(year: int) -> date:
+    """Domingo de Pascua (gregoriano) — algoritmo Butcher/Anonymous."""
+    a = year % 19
+    b, c = year // 100, year % 100
+    d, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+
+def _viernes_santo(year: int) -> date:
+    return _easter(year) - timedelta(days=2)
+
+
+def calcular_factor_antropogenico(cve_muni: str, fecha: date) -> tuple[int, list[str]]:
+    """
+    Calcula el factor antropogenico para un municipio en una fecha dada.
+
+    Retorna (pts, etiquetas) donde pts es 0-20 y etiquetas lista los eventos
+    calendario activos. Los pts se suman luego a prob_base: 20 pts => +0.20
+    en probabilidad. Cap total en FACTOR_CAP.
+    """
+    zona = ZONA_BY_CVE.get(cve_muni)
+    if not zona:
+        return 0, []
+    ecoregion, activities = zona
+    pts = 0
+    etiquetas: list[str] = []
+
+    def bono_turismo(ev_aplica_alto: bool, ev_aplica_medio: bool) -> int:
+        b = 0
+        if ev_aplica_alto and "turismo_alto" in activities:
+            b += 3
+        if ev_aplica_medio and "turismo_medio" in activities:
+            b += 2
+        return b
+
+    def bono_amm_frontera() -> int:
+        b = 0
+        if "amm_nucleo" in activities:
+            b += 2
+        elif "amm_periurbano" in activities:
+            b += 1
+        if "frontera_sierra" in activities:
+            b += 2
+        return b
+
+    mes, dia = fecha.month, fecha.day
+
+    # Semana Santa (±7 dias alrededor de Viernes Santo)
+    try:
+        vs = _viernes_santo(fecha.year)
+        if abs((fecha - vs).days) <= 7:
+            pts += BASE_POR_REGION["semana_santa"][ecoregion]
+            pts += bono_turismo(True, True) + bono_amm_frontera()
+            etiquetas.append("Semana Santa")
+    except Exception:
+        pass
+
+    # Quemas agricolas (15 ene - 31 may)
+    if (mes == 1 and dia >= 15) or (2 <= mes <= 5):
+        pts += BASE_POR_REGION["quemas_agricolas"][ecoregion]
+        if "citrica" in activities:
+            pts += 3
+        if "ganaderia_ext" in activities:
+            pts += 2
+        etiquetas.append("Quemas agricolas")
+
+    # Residuos de cosecha (octubre)
+    if mes == 10:
+        pts += BASE_POR_REGION["residuos_cosecha"][ecoregion]
+        if "citrica" in activities:
+            pts += 3
+        if "ganaderia_ext" in activities:
+            pts += 2
+        etiquetas.append("Residuos de cosecha")
+
+    # Vacaciones de verano (jul-ago)
+    if mes in (7, 8):
+        pts += BASE_POR_REGION["vacaciones_verano"][ecoregion]
+        pts += bono_turismo(True, True) + bono_amm_frontera()
+        etiquetas.append("Vacaciones verano")
+
+    # Temporada navidena (22 dic - 6 ene)
+    if (mes == 12 and dia >= 22) or (mes == 1 and dia <= 6):
+        pts += BASE_POR_REGION["navidad"][ecoregion]
+        if "turismo_alto" in activities:
+            pts += 3
+        etiquetas.append("Temporada navidena")
+
+    return min(pts, FACTOR_CAP), etiquetas
+
+
+def _nivel_desde_prob(prob: float) -> str:
+    if prob >= 0.8: return "EXTREMO"
+    if prob >= 0.6: return "MUY_ALTO"
+    if prob >= 0.4: return "ALTO"
+    if prob >= 0.2: return "MEDIO"
+    return "BAJO"
 
 
 # ─── Paso 4: Features y modelo de riesgo ────────────────────────────────────
@@ -761,27 +938,41 @@ def main():
             "pendiente_media": info.get("pendiente_media", 0),
         }
 
-        # Predicción por reglas (condiciones climáticas)
-        prob, nivel = calcular_riesgo(features)
+        # Factor antropogenico para la fecha predicha (se comparte entre modelos)
+        pts_fa, etiquetas_fa = calcular_factor_antropogenico(
+            cve, date.fromisoformat(clima_hoy["fecha"])
+        )
+        delta = pts_fa / 100.0
+
+        # Prediccion por reglas (condiciones climaticas)
+        prob_base_r, _ = calcular_riesgo(features)
+        prob_ajust_r = min(prob_base_r + delta, 1.0)
         predicciones.append({
             "cve_muni": cve,
             "fecha": clima_hoy["fecha"],
-            "prob": prob,
-            "nivel": nivel,
+            "prob": prob_ajust_r,
+            "prob_base": prob_base_r,
+            "nivel": _nivel_desde_prob(prob_ajust_r),
+            "factor_pts": pts_fa,
+            "factor_etiquetas": etiquetas_fa,
             "features": features,
             "muni_nombre": info.get("nombre", cve),
             "modelo_version": "rules_v1",
         })
 
-        # Predicción ML
+        # Prediccion ML
         if modelo_ml:
             try:
-                prob_ml, nivel_ml = predecir_ml(modelo_ml, features, info)
+                prob_base_ml, _ = predecir_ml(modelo_ml, features, info)
+                prob_ajust_ml = min(prob_base_ml + delta, 1.0)
                 predicciones_ml.append({
                     "cve_muni": cve,
                     "fecha": clima_hoy["fecha"],
-                    "prob": prob_ml,
-                    "nivel": nivel_ml,
+                    "prob": prob_ajust_ml,
+                    "prob_base": prob_base_ml,
+                    "nivel": _nivel_desde_prob(prob_ajust_ml),
+                    "factor_pts": pts_fa,
+                    "factor_etiquetas": etiquetas_fa,
                     "features": features,
                     "muni_nombre": info.get("nombre", cve),
                     "modelo_version": "ml_v1",
@@ -870,7 +1061,11 @@ def main():
         if mid:
             pred_rows.append({
                 "municipio_id": mid, "fecha": p["fecha"],
-                "prob_incendio": p["prob"], "nivel_riesgo": p["nivel"],
+                "prob_incendio": p["prob"],           # ajustada (con factor)
+                "prob_base": p["prob_base"],          # sin factor
+                "nivel_riesgo": p["nivel"],
+                "factor_antropogenico_pts": p.get("factor_pts", 0),
+                "factor_antropogenico_etiquetas": p.get("factor_etiquetas", []),
                 "features_json": json.dumps(p["features"]),
                 "modelo_version": p.get("modelo_version", "rules_v1"),
             })

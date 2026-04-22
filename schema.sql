@@ -53,8 +53,13 @@ CREATE TABLE predicciones (
     id SERIAL PRIMARY KEY,
     municipio_id INTEGER REFERENCES municipios(id) ON DELETE CASCADE,
     fecha DATE NOT NULL,
+    -- prob_incendio = prob_base ajustada con factor antropogenico (valor operativo).
+    -- prob_base = probabilidad del modelo sin factor (clima + ML solamente).
     prob_incendio DOUBLE PRECISION NOT NULL,
+    prob_base DOUBLE PRECISION,
     nivel_riesgo VARCHAR(20) NOT NULL CHECK (nivel_riesgo IN ('BAJO','MEDIO','ALTO','MUY_ALTO','EXTREMO')),
+    factor_antropogenico_pts INTEGER DEFAULT 0,
+    factor_antropogenico_etiquetas JSONB DEFAULT '[]'::jsonb,
     ndvi DOUBLE PRECISION,
     fuel_moisture DOUBLE PRECISION,
     features_json JSONB,
@@ -93,7 +98,12 @@ CREATE TABLE alertas_enviadas (
 -- Vista: riesgo actual por modelo (incluye ambas versiones rules_v1 y ml_v1)
 CREATE VIEW v_riesgo_actual AS
 SELECT m.cve_muni, m.nombre AS municipio, p.fecha,
-       p.prob_incendio, p.nivel_riesgo, p.modelo_version,
+       p.prob_incendio,       -- ajustada (con factor antropogenico)
+       p.prob_base,           -- del modelo (sin factor)
+       p.nivel_riesgo,
+       p.modelo_version,
+       p.factor_antropogenico_pts,
+       p.factor_antropogenico_etiquetas,
        c.temp_max, c.humedad_min, c.viento_max, c.dias_sin_lluvia, c.precipitacion,
        (SELECT COUNT(*) FROM hotspots h
         WHERE h.municipio_id = m.id
@@ -107,8 +117,9 @@ ORDER BY p.modelo_version, p.prob_incendio DESC;
 -- Vista: comparativa lado a lado de reglas vs ML para el ultimo dia
 CREATE VIEW v_comparativa_modelos AS
 SELECT m.cve_muni, m.nombre AS municipio, r.fecha,
-       r.prob_incendio AS prob_reglas, r.nivel_riesgo AS nivel_reglas,
-       ml.prob_incendio AS prob_ml, ml.nivel_riesgo AS nivel_ml,
+       r.prob_incendio AS prob_reglas, r.prob_base AS prob_reglas_base, r.nivel_riesgo AS nivel_reglas,
+       ml.prob_incendio AS prob_ml, ml.prob_base AS prob_ml_base, ml.nivel_riesgo AS nivel_ml,
+       r.factor_antropogenico_pts, r.factor_antropogenico_etiquetas,
        c.temp_max, c.humedad_min, c.viento_max, c.dias_sin_lluvia,
        (SELECT COUNT(*) FROM hotspots h
         WHERE h.municipio_id = m.id
