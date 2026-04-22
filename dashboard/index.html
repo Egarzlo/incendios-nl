@@ -240,6 +240,7 @@
         .ml-risk-table .expl-cell .tag.warn { background:#FFE0CC; color:#7A3300; }
         .ml-risk-table .expl-cell .tag.hot  { background:#FFD6DE; color:#6B0218; }
         .ml-risk-table .expl-cell .tag.info { background:#FFF3CD; color:#664D00; }
+        .ml-risk-table .expl-cell .tag.hist { background:#E1F5EE; color:#1A7A6E; font-weight:500; }
         @media (max-width: 720px) {
             .ml-risk-table { font-size: 0.78rem; }
             .ml-risk-table th, .ml-risk-table td { padding: 0.4rem 0.6rem; }
@@ -713,6 +714,24 @@
 
     const NAME_ALIASES = { 'carmen':'el carmen', 'el carmen':'el carmen' };
     function matchName(name) { const n=normalizeName(name); return NAME_ALIASES[n]||n; }
+
+    // Historico CONAFOR de incendios por (muni, mes). Derivado de
+    // data/estadisticasincendiosforestales2015-2024.csv. Se usa para explicar
+    // al usuario POR QUE el modelo ML asigna nivel alto: "en este mes
+    // historicamente hubieron N incendios en este municipio (ranking X del
+    // estado)".
+    const HIST_CONAFOR = {"periodo":"2015-2024","data":{"017":{"1":{"n":10,"rank":1},"2":{"n":26,"rank":1},"3":{"n":18,"rank":1},"4":{"n":18,"rank":1},"5":{"n":19,"rank":1},"6":{"n":11,"rank":1},"7":{"n":10,"rank":1},"8":{"n":7,"rank":1},"9":{"n":2,"rank":1},"10":{"n":2,"rank":1},"11":{"n":1,"rank":1},"12":{"n":2,"rank":1},"total":126},"049":{"1":{"n":6,"rank":2},"2":{"n":2,"rank":5},"3":{"n":15,"rank":2},"4":{"n":9,"rank":4},"5":{"n":5,"rank":5},"6":{"n":3,"rank":3},"7":{"n":2,"rank":8},"8":{"n":1,"rank":11},"11":{"n":1,"rank":3},"12":{"n":2,"rank":2},"total":46},"007":{"1":{"n":3,"rank":3},"2":{"n":8,"rank":2},"3":{"n":8,"rank":3},"4":{"n":5,"rank":6},"5":{"n":3,"rank":7},"6":{"n":3,"rank":2},"7":{"n":1,"rank":10},"8":{"n":3,"rank":4},"total":34},"018":{"1":{"n":2,"rank":4},"2":{"n":6,"rank":3},"3":{"n":3,"rank":6},"4":{"n":6,"rank":5},"5":{"n":6,"rank":3},"6":{"n":2,"rank":4},"7":{"n":3,"rank":4},"8":{"n":4,"rank":2},"9":{"n":2,"rank":2},"12":{"n":1,"rank":3},"total":35},"024":{"1":{"n":1,"rank":5},"2":{"n":3,"rank":4},"3":{"n":5,"rank":5},"4":{"n":18,"rank":2},"5":{"n":4,"rank":6},"6":{"n":1,"rank":8},"11":{"n":1,"rank":2},"12":{"n":1,"rank":4},"total":34},"026":{"1":{"n":1,"rank":6},"2":{"n":1,"rank":6},"7":{"n":1,"rank":12},"total":3},"030":{"1":{"n":1,"rank":7},"2":{"n":1,"rank":7},"3":{"n":1,"rank":14},"4":{"n":4,"rank":7},"5":{"n":1,"rank":10},"6":{"n":1,"rank":12},"7":{"n":3,"rank":5},"total":12},"038":{"1":{"n":1,"rank":8},"3":{"n":2,"rank":11},"4":{"n":1,"rank":12},"7":{"n":1,"rank":17},"8":{"n":1,"rank":9},"12":{"n":1,"rank":5},"total":7},"039":{"2":{"n":1,"rank":8},"3":{"n":2,"rank":10},"5":{"n":1,"rank":13},"7":{"n":1,"rank":15},"total":5},"045":{"2":{"n":1,"rank":9},"4":{"n":3,"rank":8},"5":{"n":1,"rank":16},"6":{"n":2,"rank":7},"7":{"n":3,"rank":7},"8":{"n":1,"rank":10},"total":11},"048":{"2":{"n":1,"rank":10},"3":{"n":2,"rank":8},"4":{"n":3,"rank":10},"5":{"n":6,"rank":4},"6":{"n":2,"rank":6},"7":{"n":3,"rank":6},"8":{"n":4,"rank":3},"9":{"n":1,"rank":6},"12":{"n":1,"rank":7},"total":23},"014":{"3":{"n":7,"rank":4},"4":{"n":14,"rank":3},"5":{"n":8,"rank":2},"7":{"n":1,"rank":13},"total":30},"033":{"3":{"n":2,"rank":7},"4":{"n":1,"rank":13},"5":{"n":1,"rank":14},"7":{"n":1,"rank":14},"9":{"n":1,"rank":5},"total":6},"043":{"3":{"n":2,"rank":9},"4":{"n":3,"rank":9},"5":{"n":3,"rank":8},"6":{"n":2,"rank":5},"7":{"n":2,"rank":9},"8":{"n":3,"rank":5},"12":{"n":1,"rank":6},"total":16},"019":{"3":{"n":1,"rank":12},"4":{"n":1,"rank":11},"5":{"n":1,"rank":12},"9":{"n":2,"rank":3},"total":5},"004":{"3":{"n":1,"rank":13},"9":{"n":1,"rank":4},"total":2},"047":{"3":{"n":1,"rank":15},"total":1},"037":{"5":{"n":2,"rank":9},"6":{"n":1,"rank":10},"7":{"n":1,"rank":16},"8":{"n":1,"rank":8},"total":5},"008":{"5":{"n":1,"rank":11},"7":{"n":4,"rank":2},"8":{"n":1,"rank":7},"total":6},"032":{"5":{"n":1,"rank":15},"6":{"n":1,"rank":11},"total":2},"042":{"6":{"n":1,"rank":9},"total":1},"051":{"7":{"n":3,"rank":3},"8":{"n":1,"rank":12},"9":{"n":1,"rank":7},"total":5},"028":{"7":{"n":1,"rank":11},"total":1},"001":{"8":{"n":1,"rank":6},"total":1}}};
+
+    /** Devuelve el registro historico {n, rank} del muni para el mes actual
+     *  (o cualquier otro mes). Null si no hay datos. */
+    function histParaMes(cveMuni, mes) {
+        const d = HIST_CONAFOR.data[cveMuni];
+        if (!d) return null;
+        return d[String(mes)] || null;
+    }
+
+    /** Nombres de meses en español para las explicaciones. */
+    const NOMBRES_MES = ['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
     // ═══════════════════════════════════════════════════════════════
     // BANNER ANTROPOGÉNICO
@@ -1271,13 +1290,14 @@
     // TABLA DE MUNICIPIOS EN RIESGO (ML, MEDIO o superior)
     // ═══════════════════════════════════════════════════════════════
 
-    /** Contribucion dominante del modelo para un municipio, descrita en 2-4 tags. */
+    /** Contribucion dominante del modelo para un municipio, descrita en 2-5 tags. */
     function explicarMLCompacto(d) {
         const tags = [];
         const pushWarn = (txt) => tags.push(`<span class="tag warn">${txt}</span>`);
         const pushHot  = (txt) => tags.push(`<span class="tag hot">${txt}</span>`);
         const pushInfo = (txt) => tags.push(`<span class="tag info">${txt}</span>`);
         const pushPlain= (txt) => tags.push(`<span class="tag">${txt}</span>`);
+        const pushHist = (txt) => tags.push(`<span class="tag hist">${txt}</span>`);
 
         const dsl = d.dias_sin_lluvia;
         const temp = d.temp_max;
@@ -1286,6 +1306,18 @@
         const hs = d.hotspots_24h || 0;
         const ets = etiquetasFactor(d);
         const pts = d.factor_antropogenico_pts || 0;
+
+        // Referencia historica: contexto de por que el modelo aprendio este patron.
+        // Esto es lo que mas ayuda al usuario a entender "por que Galeana en 100%".
+        const fechaDate = d.fecha ? new Date(d.fecha + 'T12:00:00') : new Date();
+        const mes = fechaDate.getMonth() + 1;
+        const histMes = histParaMes(d.cve_muni, mes);
+        if (histMes && histMes.n > 0) {
+            const nombreMes = NOMBRES_MES[mes] || 'este mes';
+            const prefix = histMes.rank === 1 ? '#1 de NL en' : `#${histMes.rank} en`;
+            const plural = histMes.n === 1 ? 'incendio' : 'incendios';
+            pushHist(`${prefix} ${nombreMes}: ${histMes.n} ${plural} 2015-24`);
+        }
 
         // Sequia
         if (dsl != null && dsl >= 14)      pushWarn(`${dsl}d sin lluvia`);
