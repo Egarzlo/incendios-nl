@@ -652,6 +652,11 @@ def predecir_ml(model_data: dict, features: dict, muni_info: dict) -> tuple[floa
     model = model_data["model"]
     scaler = model_data.get("scaler")
 
+    # Ecoregion: del catalogo ZONA_BY_CVE (fallback 1=llanos)
+    cve_muni = muni_info.get("cve_muni", "")
+    ecoregion_str = ZONA_BY_CVE.get(cve_muni, ("R1", []))[0]
+    ecoregion_int = {"R1":1, "R2":2, "R3":3, "R4":4, "R5":5}.get(ecoregion_str, 1)
+
     # Mapear features del ETL a los features del modelo
     feature_map = {
         "temp_max": features.get("temp_max") or 0,
@@ -661,11 +666,13 @@ def predecir_ml(model_data: dict, features: dict, muni_info: dict) -> tuple[floa
         "precipitacion": features.get("precipitacion") or 0,
         "et0": features.get("et0") or 0,
         "dias_sin_lluvia": features.get("dias_sin_lluvia", 0),
+        "dias_sin_lluvia_30d": features.get("dias_sin_lluvia_30d", 0),
         "mes": date.today().month,
         "dia_del_ano": date.today().timetuple().tm_yday,
         "lat": muni_info.get("lat_centroide", 25.5),
         "lon": muni_info.get("lon_centroide", -100.0),
         "elevacion": muni_info.get("elevacion_media", 500),
+        "ecoregion": ecoregion_int,
     }
 
     X = np.array([[feature_map.get(f, 0) for f in feature_names]])
@@ -923,8 +930,10 @@ def main():
         except Exception:
             pass  # si no parsea, no lo contamos en 24h
 
-    # Paso 4: calcular días sin lluvia desde BD (usa histórico completo)
+    # Paso 4: calcular dias_sin_lluvia y dias_sin_lluvia_30d desde BD
+    # (usa historico; dsl es racha actual, dsl30 es conteo en ventana 30d)
     dias_sin_lluvia_db = {}
+    dias_sin_lluvia_30d_db = {}
     for cve, info in municipios_info.items():
         mid = municipios_map.get(cve)
         if not mid:
@@ -936,6 +945,7 @@ def main():
                 "order": "fecha.desc",
                 "limit": "60",
             })
+            # Racha actual (cuenta hasta primera lluvia >=1mm)
             dias = 0
             for dia in clima_hist:
                 precip = dia.get("precipitacion") or 0
@@ -944,8 +954,13 @@ def main():
                 else:
                     break
             dias_sin_lluvia_db[cve] = dias
+            # Ventana 30d: total de dias secos entre los ultimos 30 registros
+            ultimos_30 = clima_hist[:30]
+            dsl30 = sum(1 for d in ultimos_30 if (d.get("precipitacion") or 0) < 1.0)
+            dias_sin_lluvia_30d_db[cve] = dsl30
         except Exception:
             dias_sin_lluvia_db[cve] = 0
+            dias_sin_lluvia_30d_db[cve] = 0
 
     # Cargar modelo ML
     modelo_ml = cargar_modelo_ml()
@@ -960,6 +975,7 @@ def main():
 
         clima_hoy = clima_muni[-1]
         dsl = dias_sin_lluvia_db.get(cve, calcular_dias_sin_lluvia(clima_muni))
+        dsl30 = dias_sin_lluvia_30d_db.get(cve, 0)
         hs_muni_24h = hotspots_24h_por_muni.get(cve, [])
 
         features = {
@@ -972,6 +988,7 @@ def main():
             "precipitacion": clima_hoy.get("precipitacion"),
             "et0": clima_hoy.get("et0"),
             "dias_sin_lluvia": dsl,
+            "dias_sin_lluvia_30d": dsl30,
             "n_hotspots_24h": len(hs_muni_24h),
             "frp_max": max((h["frp"] for h in hs_muni_24h), default=0),
             "elevacion_media": info.get("elevacion_media", 0),
@@ -1000,7 +1017,7 @@ def main():
             "modelo_version": "rules_v1",
         })
 
-        # Prediccion ML
+        # Prediccion ML: la version viene del pkl (ml_v2 entrenado con ERA5 real)
         if modelo_ml:
             try:
                 prob_base_ml, _ = predecir_ml(modelo_ml, features, info)
@@ -1015,7 +1032,7 @@ def main():
                     "factor_etiquetas": etiquetas_fa,
                     "features": features,
                     "muni_nombre": info.get("nombre", cve),
-                    "modelo_version": "ml_v1",
+                    "modelo_version": modelo_ml.get("version", "ml_v2"),
                 })
             except Exception as e:
                 log.error(f"Error ML para {cve}: {e}")

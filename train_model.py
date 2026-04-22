@@ -35,11 +35,20 @@ log = logging.getLogger(__name__)
 # ─── Features ──────────────────────────────────────────────────────
 FEATURES = [
     "temp_max", "temp_min", "humedad_min", "viento_max",
-    "precipitacion", "et0", "dias_sin_lluvia",
+    "precipitacion", "et0",
+    "dias_sin_lluvia", "dias_sin_lluvia_30d",
     "mes", "dia_del_ano", "lat", "lon", "elevacion",
+    "ecoregion",
 ]
 
-TARGET = "hubo_incendio"
+# Target expandido: 1 si hubo incendio ese dia o en ventana ±3d (+duracion).
+# Label enriquecido reconoce que las condiciones de riesgo persisten dias
+# antes/despues del inicio registrado por CONAFOR.
+TARGET = "hubo_incendio_ventana"
+
+# Threshold operativo: priorizar recall para alerta temprana. Un sistema que
+# "casi nunca dice si" es inutil aunque tenga buen F1.
+MIN_RECALL = 0.30
 
 
 def load_and_prepare(csv_path: str):
@@ -73,11 +82,22 @@ def evaluate_model(name, model, X_test, y_test, threshold=None):
     roc_auc = roc_auc_score(y_test, y_proba)
     pr_auc = average_precision_score(y_test, y_proba)
 
-    # Encontrar threshold óptimo para F1
+    # Seleccion de threshold: buscar el que maximice F1 con recall >= MIN_RECALL.
+    # Si ninguno cumple, caemos al de max F1 absoluto (con warning).
     if threshold is None:
         precisions, recalls, thresholds = precision_recall_curve(y_test, y_proba)
         f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-8)
-        best_idx = np.argmax(f1_scores)
+        # precision_recall_curve: len(thresholds) = len(precisions)-1 = len(recalls)-1
+        candidates = [
+            (i, f1_scores[i]) for i in range(len(thresholds))
+            if recalls[i] >= MIN_RECALL
+        ]
+        if candidates:
+            best_idx = max(candidates, key=lambda x: x[1])[0]
+            log.info(f"  Threshold escogido con recall>={MIN_RECALL}: F1={f1_scores[best_idx]:.4f} recall={recalls[best_idx]:.4f}")
+        else:
+            best_idx = int(np.argmax(f1_scores))
+            log.warning(f"  Ningun threshold alcanza recall>={MIN_RECALL}; usando max F1 absoluto")
         threshold = thresholds[min(best_idx, len(thresholds)-1)]
 
     y_pred = (y_proba >= threshold).astype(int)
