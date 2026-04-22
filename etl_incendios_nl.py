@@ -170,11 +170,32 @@ class SupabaseClient:
 
 
 # ─── Paso 1: Fetch hotspots de NASA FIRMS ───────────────────────────────────
-def fetch_firms_hotspots(day_range: int = 2) -> list[dict]:
-    sources = ["VIIRS_NOAA20_NRT", "VIIRS_SNPP_NRT"]
-    all_hotspots = []
+# Cuatro fuentes NRT activas hoy (abril 2026):
+#  - VIIRS_NOAA20_NRT : satelite NOAA-20, ~375m, desde 2018
+#  - VIIRS_SNPP_NRT   : Suomi NPP, ~375m, desde 2012
+#  - VIIRS_NOAA21_NRT : NOAA-21 (JPSS-2), ~375m, operacional desde 2023
+#  - MODIS_NRT        : Terra + Aqua combinado, ~1km, legado (mayor cobertura
+#                       historica, util para continuidad y redundancia)
+FIRMS_SOURCES = ["VIIRS_NOAA20_NRT", "VIIRS_SNPP_NRT", "VIIRS_NOAA21_NRT", "MODIS_NRT"]
 
-    for source in sources:
+
+def _safe_parse_float(v, default: float = 0.0) -> float:
+    try:
+        if v is None or v == "":
+            return default
+        return float(v)
+    except (ValueError, TypeError):
+        return default
+
+
+def fetch_firms_hotspots(day_range: int = 2) -> list[dict]:
+    import csv
+    import io
+
+    all_hotspots = []
+    per_source_counts = {}
+
+    for source in FIRMS_SOURCES:
         url = (
             f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/"
             f"{FIRMS_MAP_KEY}/{source}/{NL_BBOX_STR}/{day_range}"
@@ -182,31 +203,50 @@ def fetch_firms_hotspots(day_range: int = 2) -> list[dict]:
         try:
             resp = requests.get(url, timeout=60)
             resp.raise_for_status()
-            lines = resp.text.strip().split("\n")
-            if len(lines) <= 1:
-                log.info(f"FIRMS {source}: sin hotspots detectados")
-                continue
-
-            headers = lines[0].split(",")
-            for line in lines[1:]:
-                vals = line.split(",")
-                if len(vals) < len(headers):
+            reader = csv.DictReader(io.StringIO(resp.text))
+            count = 0
+            errors = 0
+            for row in reader:
+                try:
+                    lat = _safe_parse_float(row.get("latitude"))
+                    lon = _safe_parse_float(row.get("longitude"))
+                    if lat == 0.0 and lon == 0.0:
+                        errors += 1
+                        continue
+                    # VIIRS usa bright_ti4, MODIS usa brightness
+                    brightness = _safe_parse_float(row.get("bright_ti4")) or _safe_parse_float(row.get("brightness"))
+                    all_hotspots.append({
+                        "latitude": lat,
+                        "longitude": lon,
+                        "brightness": brightness,
+                        "frp": _safe_parse_float(row.get("frp")),
+                        "confidence": (row.get("confidence") or "")[:10],
+                        "satellite": row.get("satellite") or source,
+                        "source": source,
+                        "detected_at": parse_firms_datetime(
+                            row.get("acq_date", ""), row.get("acq_time", "0000")
+                        ),
+                    })
+                    count += 1
+                except Exception as e:
+                    errors += 1
+                    # No abortamos toda la fuente por una fila mal formada
                     continue
-                row = dict(zip(headers, vals))
-                all_hotspots.append({
-                    "latitude": float(row.get("latitude", 0)),
-                    "longitude": float(row.get("longitude", 0)),
-                    "brightness": float(row.get("bright_ti4", 0) or row.get("brightness", 0)),
-                    "frp": float(row.get("frp", 0)),
-                    "confidence": row.get("confidence", ""),
-                    "satellite": row.get("satellite", source),
-                    "source": source,
-                    "detected_at": parse_firms_datetime(row.get('acq_date', ''), row.get('acq_time', '0000')),
-                })
-            log.info(f"FIRMS {source}: {len(lines) - 1} hotspots descargados")
+            per_source_counts[source] = count
+            if count == 0 and errors == 0:
+                log.info(f"FIRMS {source}: sin hotspots detectados")
+            elif errors:
+                log.info(f"FIRMS {source}: {count} hotspots descargados, {errors} filas ignoradas")
+            else:
+                log.info(f"FIRMS {source}: {count} hotspots descargados")
         except Exception as e:
             log.error(f"Error fetching FIRMS {source}: {e}")
+            per_source_counts[source] = 0
 
+    total = sum(per_source_counts.values())
+    if total:
+        detalle = ", ".join(f"{s.split('_')[-2] if len(s.split('_'))>2 else s}: {n}" for s, n in per_source_counts.items())
+        log.info(f"FIRMS total: {total} hotspots de 4 fuentes ({detalle})")
     return all_hotspots
 
 
