@@ -27,7 +27,10 @@ CREATE TABLE hotspots (
     detected_at TIMESTAMPTZ NOT NULL,
     satellite VARCHAR(20),
     confidence VARCHAR(10),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    -- Necesario para que el upsert on_conflict=latitude,longitude,detected_at,source
+    -- del ETL sea idempotente y no genere duplicados entre runs diarios que solapan 48h.
+    UNIQUE (latitude, longitude, detected_at, source)
 );
 CREATE INDEX idx_hotspots_muni_fecha ON hotspots(municipio_id, detected_at);
 
@@ -57,7 +60,9 @@ CREATE TABLE predicciones (
     features_json JSONB,
     modelo_version VARCHAR(20) DEFAULT 'rules_v1',
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(municipio_id, fecha)
+    -- Permite coexistir rules_v1 y ml_v1 para la misma (muni,fecha).
+    -- El ETL upserta con on_conflict=(municipio_id, fecha, modelo_version).
+    UNIQUE(municipio_id, fecha, modelo_version)
 );
 CREATE INDEX idx_pred_fecha_nivel ON predicciones(fecha, nivel_riesgo);
 
@@ -85,15 +90,38 @@ CREATE TABLE alertas_enviadas (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Vista: riesgo actual
+-- Vista: riesgo actual por modelo (incluye ambas versiones rules_v1 y ml_v1)
 CREATE VIEW v_riesgo_actual AS
-SELECT m.cve_muni, m.nombre AS municipio, p.fecha, p.prob_incendio, p.nivel_riesgo,
+SELECT m.cve_muni, m.nombre AS municipio, p.fecha,
+       p.prob_incendio, p.nivel_riesgo, p.modelo_version,
        c.temp_max, c.humedad_min, c.viento_max, c.dias_sin_lluvia, c.precipitacion,
-       (SELECT COUNT(*) FROM hotspots h WHERE h.municipio_id = m.id AND h.detected_at >= NOW() - INTERVAL '24 hours') AS hotspots_24h
+       (SELECT COUNT(*) FROM hotspots h
+        WHERE h.municipio_id = m.id
+        AND h.detected_at >= NOW() - INTERVAL '24 hours') AS hotspots_24h
 FROM municipios m
-JOIN predicciones p ON p.municipio_id = m.id AND p.fecha = (SELECT MAX(fecha) FROM predicciones)
+JOIN predicciones p ON p.municipio_id = m.id
+    AND p.fecha = (SELECT MAX(fecha) FROM predicciones WHERE modelo_version = p.modelo_version)
 LEFT JOIN clima_diario c ON c.municipio_id = m.id AND c.fecha = p.fecha
-ORDER BY p.prob_incendio DESC;
+ORDER BY p.modelo_version, p.prob_incendio DESC;
+
+-- Vista: comparativa lado a lado de reglas vs ML para el ultimo dia
+CREATE VIEW v_comparativa_modelos AS
+SELECT m.cve_muni, m.nombre AS municipio, r.fecha,
+       r.prob_incendio AS prob_reglas, r.nivel_riesgo AS nivel_reglas,
+       ml.prob_incendio AS prob_ml, ml.nivel_riesgo AS nivel_ml,
+       c.temp_max, c.humedad_min, c.viento_max, c.dias_sin_lluvia,
+       (SELECT COUNT(*) FROM hotspots h
+        WHERE h.municipio_id = m.id
+        AND h.detected_at >= NOW() - INTERVAL '24 hours') AS hotspots_24h
+FROM municipios m
+JOIN predicciones r ON r.municipio_id = m.id
+    AND r.modelo_version = 'rules_v1'
+    AND r.fecha = (SELECT MAX(fecha) FROM predicciones WHERE modelo_version = 'rules_v1')
+LEFT JOIN predicciones ml ON ml.municipio_id = m.id
+    AND ml.modelo_version = 'ml_v1'
+    AND ml.fecha = r.fecha
+LEFT JOIN clima_diario c ON c.municipio_id = m.id AND c.fecha = r.fecha
+ORDER BY GREATEST(r.prob_incendio, COALESCE(ml.prob_incendio, 0)) DESC;
 
 -- RLS
 ALTER TABLE municipios ENABLE ROW LEVEL SECURITY;

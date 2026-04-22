@@ -1,6 +1,10 @@
 -- ============================================================================
--- Limpieza de hotspots duplicados y constraint para evitar futuros
--- Ejecutar en Supabase SQL Editor
+-- [HISTORICO - YA APLICADO EN PRODUCCION 2026-04] Limpieza de hotspots
+-- duplicados y constraint UNIQUE (lat, lon, detected_at, source).
+-- La constraint equivalente ya esta declarada directamente en schema.sql,
+-- por lo que este script NO debe re-ejecutarse en nuevos deploys; se conserva
+-- aqui como referencia historica de la migracion.
+-- Validado 2026-04-22: 0 duplicados en 964 hotspots.
 -- ============================================================================
 
 -- 1. Ver cuántos duplicados hay
