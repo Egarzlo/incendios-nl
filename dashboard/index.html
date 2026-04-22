@@ -411,49 +411,122 @@
 
         <div class="section metodologia" id="sec-metodologia">
             <h2>Fundamento del modelo</h2>
-            <p>La ocurrencia y propagacion de un incendio forestal depende de la convergencia simultanea de tres factores conocidos como el "triangulo del fuego": combustible disponible, condiciones atmosfericas favorables y una fuente de ignicion. El modelo traduce cada uno de estos factores en variables cuantificables que se obtienen diariamente de fuentes satelitales y meteorologicas.</p>
+            <p>La ocurrencia y propagacion de un incendio forestal depende de la convergencia simultanea de tres factores conocidos como el <em>triangulo del fuego</em>: combustible disponible, condiciones atmosfericas favorables y una fuente de ignicion. El sistema traduce cada uno en variables cuantificables que se obtienen diariamente de fuentes satelitales y meteorologicas, y las procesa en dos modelos complementarios (reglas fisicas y Random Forest entrenado con historico CONAFOR), a los que se aplica opcionalmente un factor antropogenico derivado de la ecorregion Vocacion Ambiental A.C. y la actividad humana caracteristica del municipio.</p>
             <div class="highlight-box">
-                El sistema evalua diariamente la probabilidad de incendio en cada uno de los 51 municipios del estado, integrando datos satelitales de la NASA, variables meteorologicas en tiempo casi-real, caracteristicas geograficas del territorio y <strong>factores antropogenicos de riesgo</strong> como temporadas vacacionales y actividad agricola.
+                El ETL se ejecuta diariamente a las 6:00 AM CST (GitHub Actions) para cada uno de los <strong>51 municipios de Nuevo Leon</strong>. Los resultados se almacenan en Supabase y son consumidos por este dashboard. Todas las etapas son idempotentes y auditables.
             </div>
 
-            <h3>1. Disponibilidad y sequedad del combustible (35% del indice)</h3>
-            <p>La vegetacion muerta y viva en el suelo forestal constituye el combustible. Su capacidad de arder depende directamente de su contenido de humedad. <strong>Dias acumulados sin precipitacion significativa</strong> es la variable mas predictiva del modelo. Cuando este indicador supera los 7 dias, el combustible fino pierde la mayor parte de su humedad. A partir de los 14 dias sin lluvia, incluso el combustible grueso alcanza niveles criticos de sequedad.</p>
+            <h2>1. Fuentes de datos en produccion</h2>
+            <table>
+                <thead><tr><th>Fuente</th><th>Dato</th><th>Resolucion</th><th>Frecuencia</th></tr></thead>
+                <tbody>
+                    <tr><td>NASA FIRMS — VIIRS NOAA-20</td><td>Hotspots termicos (NRT)</td><td>375 m</td><td>~12 pasadas/dia</td></tr>
+                    <tr><td>NASA FIRMS — VIIRS NOAA-21 (JPSS-2)</td><td>Hotspots termicos (NRT)</td><td>375 m</td><td>~12 pasadas/dia</td></tr>
+                    <tr><td>NASA FIRMS — VIIRS Suomi NPP</td><td>Hotspots termicos (NRT)</td><td>375 m</td><td>~12 pasadas/dia</td></tr>
+                    <tr><td>NASA FIRMS — MODIS Terra/Aqua</td><td>Hotspots termicos (NRT)</td><td>1 km</td><td>~4 pasadas/dia</td></tr>
+                    <tr><td>Open-Meteo Forecast API</td><td>Temp max/min, humedad min, viento max, precipitacion, ET0</td><td>~11 km</td><td>Diaria</td></tr>
+                    <tr><td>INEGI Marco Geoestadistico 2025.1</td><td>Poligonos municipales oficiales (51 municipios)</td><td>1:50,000</td><td>Estatico</td></tr>
+                    <tr><td>Mapa ecorregiones Vocacion Ambiental A.C.</td><td>Clasificacion R1–R5 por municipio</td><td>Municipal</td><td>Estatico</td></tr>
+                    <tr><td>CONAFOR — Estadisticas incendios forestales</td><td>Historico de incendios (2015–2024)</td><td>Municipal, anual</td><td>Entrenamiento ML</td></tr>
+                </tbody>
+            </table>
+            <p>Los hotspots de las 4 fuentes FIRMS se ingestan con ventana de 48 h. Cada deteccion se geocodifica por <strong>point-in-polygon contra el shapefile INEGI</strong> (no por centroide mas cercano); los hotspots fuera del estado se descartan. Las detecciones se almacenan como filas independientes por satelite y cuentan con constraint UNIQUE <code>(lat, lon, detected_at, source)</code> que garantiza idempotencia.</p>
 
-            <h3>2. Condiciones meteorologicas de propagacion (55% del indice)</h3>
-            <p><strong>Temperatura maxima</strong> — por encima de 35°C precalienta el combustible y crea corrientes convectivas. <strong>Humedad relativa minima</strong> — por debajo del 25% la atmosfera deshidrata activamente el material combustible. <strong>Velocidad maxima del viento</strong> — vientos superiores a 30 km/h transportan pavesas y transforman un incendio manejable en uno catastrofico. La interaccion entre estas tres variables es multiplicativa, no aditiva.</p>
+            <h2>2. Features meteorologicas por municipio</h2>
+            <p>Open-Meteo se consulta con el <strong>centroide geometrico oficial del poligono INEGI</strong> de cada municipio (no la cabecera municipal), lo que garantiza que el clima reflejado corresponde al area del municipio y no a un punto arbitrario. Para cada municipio y dia se calculan:</p>
+            <table>
+                <thead><tr><th>Feature</th><th>Origen</th><th>Uso</th></tr></thead>
+                <tbody>
+                    <tr><td>temp_max, temp_min (°C)</td><td>Open-Meteo daily</td><td>Reglas + ML</td></tr>
+                    <tr><td>humedad_min (%)</td><td>Open-Meteo daily</td><td>Reglas + ML</td></tr>
+                    <tr><td>viento_max (km/h)</td><td>Open-Meteo daily</td><td>Reglas + ML</td></tr>
+                    <tr><td>precipitacion (mm)</td><td>Open-Meteo daily</td><td>Reglas + ML</td></tr>
+                    <tr><td>et0 (evapotranspiracion FAO)</td><td>Open-Meteo daily</td><td>ML</td></tr>
+                    <tr><td>dias_sin_lluvia</td><td>Historico clima_diario (umbral 1 mm)</td><td>Reglas + ML</td></tr>
+                    <tr><td>n_hotspots_24h, frp_max</td><td>Hotspots ultimas 24 h del municipio</td><td>Reglas + ML</td></tr>
+                    <tr><td>elevacion_media, pendiente_media</td><td>Estatico (catalogo municipios)</td><td>ML</td></tr>
+                    <tr><td>mes, dia_del_año</td><td>Fecha del ETL</td><td>ML</td></tr>
+                </tbody>
+            </table>
 
-            <h3>3. Deteccion de fuego activo (10% del indice base)</h3>
-            <p>Los sensores VIIRS a bordo de los satelites NOAA-20 y Suomi-NPP de la NASA detectan anomalias termicas con resolucion de 375 metros. Cada hotspot indica probable presencia de fuego activo.</p>
+            <h2>3. Modelo base — reglas fisicas</h2>
+            <p>Para explicar el POR QUE del riesgo, el sistema calcula un score ponderado a partir del triangulo del fuego. Produce <code>prob_base</code> (antes del factor antropogenico).</p>
+            <table>
+                <thead><tr><th>Factor</th><th>Peso max</th><th>Umbrales</th></tr></thead>
+                <tbody>
+                    <tr><td>Sequedad del combustible (dias sin lluvia)</td><td>35 pts</td><td>&#8805;14d = 35 | &#8805;7d = 25 | &#8805;3d = 15 | &lt;3d = 5</td></tr>
+                    <tr><td>Temperatura maxima</td><td>20 pts</td><td>&#8805;40°C = 20 | &#8805;35 = 15 | &#8805;30 = 10</td></tr>
+                    <tr><td>Deficit de humedad (humedad min)</td><td>20 pts</td><td>&#8804;15% = 20 | &#8804;25 = 15 | &#8804;40 = 10</td></tr>
+                    <tr><td>Potencial de propagacion (viento max)</td><td>15 pts</td><td>&#8805;50 km/h = 15 | &#8805;30 = 10 | &#8805;15 = 5</td></tr>
+                    <tr><td>Hotspots activos 24 h</td><td>10 pts</td><td>&#8805;3 = 10 | &#8805;1 = 7</td></tr>
+                </tbody>
+            </table>
+            <p>Score total maximo = 100 pts. Se convierte a probabilidad dividiendo entre 100 y se acota a <code>[0, 1]</code>.</p>
 
-            <h3>4. Factor antropogenico de riesgo (hasta +20 pts adicionales)</h3>
+            <h2>4. Modelo ML — Random Forest</h2>
+            <p>Paralelamente se aplica un clasificador <strong>Random Forest</strong> entrenado con el historico CONAFOR 2015–2024 enriquecido con variables climaticas reanalizadas de esos años. El modelo predice probabilidad de ocurrencia de incendio a nivel (municipio, dia) a partir de los features listados en la seccion 2. Ambos modelos coexisten en la tabla <code>predicciones</code> con etiqueta <code>modelo_version = rules_v1</code> o <code>ml_v1</code> y se muestran en pestañas separadas.</p>
+
+            <h2>5. Factor antropogenico</h2>
             <div class="antro-box">
-                <strong>Componente nuevo:</strong> El modelo incorpora un factor de riesgo humano basado en patrones calendarios que incrementan la probabilidad de ignicion por actividad antropogenica. Se calcula automaticamente segun la fecha del dia.
+                El factor antropogenico es un <strong>ajuste explicito y toggleable</strong> que se aplica encima del output de ambos modelos. Se calcula en el backend y se almacena en BD como <code>factor_antropogenico_pts</code> (0–20) y <code>factor_antropogenico_etiquetas</code>. El usuario puede desactivarlo desde el dashboard con el checkbox "Incluir factor humano" para ver el output del modelo puro.
             </div>
-            <p>La mayoria de los incendios forestales en Mexico tienen origen humano (intencional o accidental). Ciertos periodos concentran mayor actividad humana en zonas forestales o mayor practica de quemas agricolas, elevando la probabilidad de ignicion independientemente de las condiciones meteorologicas.</p>
+            <p>La formula combina dos capas independientes:</p>
+
+            <h3>5.1 Ecorregion (Vocacion Ambiental A.C.)</h3>
+            <p>Los 51 municipios se asignan a una de las 5 ecorregiones del mapa oficial de Vocacion Ambiental A.C.. La ecorregion actua como proxy del <em>comportamiento del fuego por tipo de combustible</em>: la Sierra Madre (R4) tiene carga pesada pino-encino con potencial de fuego de copa; el altiplano (R5) tiene pastoreo extensivo que favorece quemas; los llanos (R1) tienen carga baja matorral xerofilo.</p>
             <table>
-                <thead><tr><th>Periodo</th><th>Fechas</th><th>Pts adicionales</th><th>Razon</th></tr></thead>
+                <thead><tr><th>Ecorregion</th><th>Descripcion</th><th># Municipios</th></tr></thead>
                 <tbody>
-                    <tr><td>Semana Santa</td><td>±7 dias alrededor de Viernes Santo</td><td>+10 pts</td><td>Turismo masivo, fogatas y fuegos artificiales en zonas forestales</td></tr>
-                    <tr><td>Quemas agricolas (pico)</td><td>15 ene – 31 may</td><td>+10 pts</td><td>Preparacion de terrenos para siembra; practica extendida en zonas rurales</td></tr>
-                    <tr><td>Quemas agricolas (postemporada)</td><td>1 – 31 oct</td><td>+5 pts</td><td>Quemas de residuos de cosecha</td></tr>
-                    <tr><td>Vacaciones de verano</td><td>1 jul – 31 ago</td><td>+5 pts</td><td>Campismo, excursionismo, mayor presencia humana en bosques</td></tr>
-                    <tr><td>Fin de año</td><td>22 dic – 6 ene</td><td>+5 pts</td><td>Pirotecnia, fogatas navideñas, quemas de año viejo</td></tr>
+                    <tr><td>R1 — Llanos / matorral xerofilo</td><td>Planicies y valles semiaridos, matorral espinoso tamaulipeco</td><td>33</td></tr>
+                    <tr><td>R2 — Desierto oeste</td><td>Transicion desierto chihuahuense</td><td>1</td></tr>
+                    <tr><td>R3 — Piedemonte / citrica</td><td>Transicion submontana, agricultura intensiva</td><td>10</td></tr>
+                    <tr><td>R4 — Sierra Madre Oriental</td><td>Bosque templado pino-encino</td><td>3</td></tr>
+                    <tr><td>R5 — Altiplano semiarido</td><td>Pastizal y matorral de altitud</td><td>4</td></tr>
                 </tbody>
             </table>
 
-            <h2>Calculo del indice de riesgo</h2>
+            <h3>5.2 Actividad humana caracteristica</h3>
+            <p>Encima de la ecorregion, cada municipio recibe una o mas etiquetas de actividad que modulan la respuesta a cada evento calendario:</p>
+            <ul>
+                <li><strong>amm_nucleo</strong> — 9 municipios del Area Metropolitana de Monterrey</li>
+                <li><strong>amm_periurbano</strong> — conurbados extendidos (Cadereyta, Salinas Victoria, Cienega de Flores, Pesqueria, El Carmen, Gral Zuazua)</li>
+                <li><strong>frontera_sierra</strong> — municipios AMM con superficie forestal relevante (La Huasteca, Chipinque, Cerro de la Silla, Cumbres)</li>
+                <li><strong>citrica</strong> — distrito citrico (Allende, Montemorelos, Linares, Hualahuises, Gral Teran, Cadereyta)</li>
+                <li><strong>turismo_alto</strong> — destinos turisticos de alta afluencia (Santiago, Galeana, Allende, Bustamante)</li>
+                <li><strong>turismo_medio</strong> — destinos de afluencia media (Iturbide, Rayones, Linares, Cadereyta)</li>
+                <li><strong>ganaderia_ext</strong> — ganaderia extensiva con quemas de pastoreo (Dr Arroyo, Mier y Noriega, Gral Zaragoza, Aramberri, Galeana)</li>
+            </ul>
+
+            <h3>5.3 Matriz de pesos</h3>
+            <p>Pesos base por ecorregion y evento (pts):</p>
             <table>
-                <thead><tr><th>Factor</th><th>Peso</th><th>Variable</th><th>Umbrales</th></tr></thead>
+                <thead><tr><th>Evento</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>R5</th></tr></thead>
                 <tbody>
-                    <tr><td>Sequedad del combustible</td><td>35 pts</td><td>Dias sin lluvia</td><td>&#8805;14d = 35 | &#8805;7d = 25 | &#8805;3d = 15</td></tr>
-                    <tr><td>Temperatura extrema</td><td>20 pts</td><td>Temp. maxima</td><td>&#8805;40°C = 20 | &#8805;35 = 15 | &#8805;30 = 10</td></tr>
-                    <tr><td>Deficit de humedad</td><td>20 pts</td><td>Humedad min.</td><td>&#8804;15% = 20 | &#8804;25 = 15 | &#8804;40 = 10</td></tr>
-                    <tr><td>Potencial de propagacion</td><td>15 pts</td><td>Viento max.</td><td>&#8805;50km/h = 15 | &#8805;30 = 10 | &#8805;15 = 5</td></tr>
-                    <tr><td>Factor antropogenico</td><td>+20 pts</td><td>Calendario de riesgo</td><td>Semana Santa + Quemas agricolas (acumulable, max 20)</td></tr>
+                    <tr><td>Semana Santa (±7d Viernes Santo)</td><td>4</td><td>2</td><td>6</td><td><strong>10</strong></td><td>5</td></tr>
+                    <tr><td>Quemas agricolas (15 ene – 31 may)</td><td>5</td><td>2</td><td><strong>10</strong></td><td>4</td><td><strong>8</strong></td></tr>
+                    <tr><td>Residuos cosecha (octubre)</td><td>3</td><td>1</td><td>5</td><td>2</td><td>4</td></tr>
+                    <tr><td>Vacaciones verano (jul – ago)</td><td>2</td><td>1</td><td>4</td><td><strong>8</strong></td><td>3</td></tr>
+                    <tr><td>Temporada navideña (22 dic – 6 ene)</td><td>4</td><td>3</td><td>5</td><td>5</td><td>4</td></tr>
                 </tbody>
             </table>
+            <p>Bonos adicionales cuando la actividad del municipio aplica al evento:</p>
+            <table>
+                <thead><tr><th>Actividad</th><th>Eventos aplicables</th><th>+Pts</th></tr></thead>
+                <tbody>
+                    <tr><td>turismo_alto</td><td>Semana Santa, Vacaciones verano, Navidad</td><td>+3</td></tr>
+                    <tr><td>turismo_medio</td><td>Semana Santa, Vacaciones verano</td><td>+2</td></tr>
+                    <tr><td>amm_nucleo</td><td>Semana Santa, Vacaciones verano</td><td>+2</td></tr>
+                    <tr><td>amm_periurbano</td><td>Semana Santa, Vacaciones verano</td><td>+1</td></tr>
+                    <tr><td>frontera_sierra</td><td>Semana Santa, Vacaciones verano</td><td>+2</td></tr>
+                    <tr><td>citrica</td><td>Quemas agricolas, Residuos cosecha</td><td>+3</td></tr>
+                    <tr><td>ganaderia_ext</td><td>Quemas agricolas, Residuos cosecha</td><td>+2</td></tr>
+                </tbody>
+            </table>
+            <p>Los pts se suman (base ecorregion + bonos de todas las actividades aplicables) y se <strong>acotan a un maximo de 20 pts</strong>. El ajuste a la probabilidad es <code>prob_ajustada = min(prob_base + pts/100, 1.0)</code>.</p>
+            <p>Viernes Santo se calcula programaticamente con el algoritmo anonimo/Butcher (valido para cualquier año).</p>
 
-            <h2>Niveles de riesgo</h2>
+            <h2>6. Niveles de riesgo</h2>
+            <p>La probabilidad (ajustada o base, segun el toggle) se discretiza en 5 niveles con los siguientes umbrales:</p>
             <table>
                 <thead><tr><th>Nivel</th><th>Probabilidad</th><th>Accion recomendada</th></tr></thead>
                 <tbody>
@@ -465,21 +538,12 @@
                 </tbody>
             </table>
 
-            <h2>Fuentes de datos</h2>
-            <table>
-                <thead><tr><th>Fuente</th><th>Datos</th><th>Resolucion</th><th>Frecuencia</th></tr></thead>
-                <tbody>
-                    <tr><td>NASA FIRMS VIIRS</td><td>Hotspots de fuego activo</td><td>375 m</td><td>Cada 3 horas</td></tr>
-                    <tr><td>Open-Meteo</td><td>Temperatura, humedad, viento, precipitacion</td><td>11 km</td><td>Horaria</td></tr>
-                    <tr><td>CONAFOR</td><td>Historico de incendios 2015-2024</td><td>Municipal</td><td>Anual</td></tr>
-                    <tr><td>INEGI</td><td>Uso de suelo, vegetacion, topografia</td><td>1:250,000</td><td>Periodica</td></tr>
-                    <tr><td>Supabase / ETL diario</td><td>Datos climaticos procesados por municipio</td><td>Municipal</td><td>Diaria (6:00 AM)</td></tr>
-                </tbody>
-            </table>
+            <h2>7. Trazabilidad y reproducibilidad</h2>
+            <p>Para cada corrida del ETL y cada (municipio, fecha, modelo) la BD almacena: <code>prob_base</code>, <code>prob_incendio</code> (ajustada), <code>factor_antropogenico_pts</code>, <code>factor_antropogenico_etiquetas</code>, todos los features climaticos (<code>features_json</code>) y la version del modelo. Los hotspots conservan su deteccion original con satelite, coordenadas y FRP. El codigo fuente del ETL y este dashboard estan en un repositorio git con historial completo de cambios.</p>
+            <p>El dashboard <strong>no aplica transformaciones a los numeros</strong>: lee y muestra directamente lo almacenado en Supabase. El checkbox "Incluir factor humano" solo alterna entre mostrar <code>prob_incendio</code> o <code>prob_base</code>, ambos ya calculados en el backend.</p>
 
-            <h2>Modelo ML (Prediccion con aprendizaje automatico)</h2>
-            <p>Ademas del modelo de reglas, el sistema incluye un modelo de <strong>Random Forest</strong> entrenado con datos historicos reales de CONAFOR (2015-2024) combinados con variables climaticas historicas. Este modelo aprende patrones complejos no lineales entre las condiciones meteorologicas y la ocurrencia real de incendios en Nuevo Leon.</p>
-            <p>La pestana "Condiciones climaticas" muestra el analisis basado en reglas mas el factor antropogenico (util para entender POR QUE hay riesgo), mientras que "Prediccion ML" muestra la prediccion del modelo entrenado (util para estimar la probabilidad real basada en patrones historicos). Ambas perspectivas son complementarias.</p>
+            <h2>8. Comparacion entre pestañas</h2>
+            <p><strong>Condiciones climaticas</strong> muestra el modelo de reglas (rules_v1) junto con el panel de detecciones satelitales. Es util para <em>entender por que</em> hay riesgo (que factor climatico o humano esta elevado). <strong>Prediccion ML</strong> muestra el Random Forest (ml_v1). Es util para <em>estimar la probabilidad real</em> en base a patrones historicos observados. La vista <code>v_comparativa_modelos</code> en BD permite ver ambos numeros lado a lado para cada municipio.</p>
         </div>
     </div>
 
