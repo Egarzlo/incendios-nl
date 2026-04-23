@@ -1266,7 +1266,7 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
     ]
     if munis_mostrar:
         for p in munis_mostrar:
-            _, t = _bloque_muni(p, ml_por_cve)
+            _, t = _bloque_muni(p, ml_por_cve, fecha_obj)
             text_parts.append(t)
     else:
         text_parts.append("Sin municipios con riesgo elevado en tu seleccion hoy.\n")
