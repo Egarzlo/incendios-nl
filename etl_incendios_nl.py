@@ -879,6 +879,99 @@ DASHBOARD_URL      = os.getenv("DASHBOARD_URL", "https://incendios-nl.netlify.ap
 
 NIVEL_ORDER = {"BAJO": 0, "MEDIO": 1, "ALTO": 2, "MUY_ALTO": 3, "EXTREMO": 4}
 
+# Color por nivel (alineados con el dashboard)
+NIVEL_COLOR_HEX = {
+    "BAJO":     "#2B9348",
+    "MEDIO":    "#E5A100",
+    "ALTO":     "#E8600A",
+    "MUY_ALTO": "#D90429",
+    "EXTREMO":  "#4A0012",
+}
+
+_HIST_CONAFOR_CACHE = None
+
+
+def cargar_hist_conafor_mes() -> dict:
+    """
+    Carga conteo historico CONAFOR 2015-2024 por (cve_muni, mes).
+    Retorna {cve: {mes: {'n': int, 'rank': int}}}. Cacheado en memoria.
+    """
+    global _HIST_CONAFOR_CACHE
+    if _HIST_CONAFOR_CACHE is not None:
+        return _HIST_CONAFOR_CACHE
+    import csv as _csv
+    from collections import defaultdict
+    counts = defaultdict(lambda: defaultdict(int))  # counts[cve][mes]
+    path = "data/estadisticasincendiosforestales2015-2024.csv"
+    if not os.path.exists(path):
+        _HIST_CONAFOR_CACHE = {}
+        return _HIST_CONAFOR_CACHE
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for row in _csv.DictReader(f):
+                if row.get("CVE_ENT") != "19":
+                    continue
+                cve = str(row.get("CVE_MUN", "")).zfill(3)
+                fecha = row.get("Fecha_Inicio", "")
+                if not fecha or not cve:
+                    continue
+                try:
+                    mes = int(fecha.split("-")[1])
+                    counts[cve][mes] += 1
+                except Exception:
+                    pass
+        # Calcular ranking por mes
+        result = {}
+        for mes in range(1, 13):
+            por_muni = [(cve, counts[cve].get(mes, 0)) for cve in counts if counts[cve].get(mes, 0) > 0]
+            por_muni.sort(key=lambda x: -x[1])
+            for rank, (cve, n) in enumerate(por_muni, start=1):
+                if cve not in result:
+                    result[cve] = {}
+                result[cve][mes] = {"n": n, "rank": rank}
+        _HIST_CONAFOR_CACHE = result
+        log.info(f"Historico CONAFOR cargado para {len(result)} municipios")
+    except Exception as e:
+        log.warning(f"No se pudo cargar historico CONAFOR: {e}")
+        _HIST_CONAFOR_CACHE = {}
+    return _HIST_CONAFOR_CACHE
+
+
+def explicar_condiciones_suscriptor(f: dict, cve_muni: str, fecha: date,
+                                    factor_pts: int, etiquetas_fa: list) -> str:
+    """
+    Explicacion completa para el correo del suscriptor: condiciones climaticas,
+    factor antropogenico y contexto historico CONAFOR.
+    """
+    partes = []
+    # Reutilizar el texto climatico base
+    partes.append(explicar_condiciones(f))
+
+    # Factor antropogenico en lenguaje natural
+    if factor_pts and factor_pts >= 10 and etiquetas_fa:
+        evs = ", ".join(e.lower() for e in etiquetas_fa)
+        partes.append(f"Ademas, en esta fecha coinciden eventos que elevan el riesgo humano ({evs}), sumando {factor_pts} puntos al indice.")
+    elif factor_pts and factor_pts > 0 and etiquetas_fa:
+        evs = ", ".join(e.lower() for e in etiquetas_fa)
+        partes.append(f"Se agregan {factor_pts} puntos por {evs} en esta temporada.")
+
+    # Contexto historico CONAFOR
+    hist = cargar_hist_conafor_mes()
+    mes_hist = hist.get(cve_muni, {}).get(fecha.month)
+    if mes_hist and mes_hist.get("n"):
+        n = mes_hist["n"]
+        rank = mes_hist["rank"]
+        meses_esp = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
+        mes_n = meses_esp[fecha.month]
+        if rank == 1:
+            partes.append(f"Historicamente este es el municipio #1 de Nuevo Leon con mas incendios en {mes_n} ({n} registrados entre 2015 y 2024).")
+        elif rank <= 5:
+            partes.append(f"Historicamente este municipio ocupa el lugar #{rank} en Nuevo Leon en {mes_n}, con {n} incendios registrados entre 2015 y 2024.")
+        elif n >= 3:
+            partes.append(f"En {mes_n} este municipio ha registrado {n} incendios entre 2015 y 2024.")
+
+    return " ".join(p for p in partes if p)
+
 
 def _nivel_ge(n1: str, n2: str) -> bool:
     """True si n1 >= n2 en escala de nivel."""
@@ -892,17 +985,31 @@ def _html_escape(s):
             .replace('"', "&quot;"))
 
 
-def enviar_email_mailjet(to_email: str, subject: str, html_body: str, text_body: str) -> tuple[bool, str]:
-    """Envia un correo via Mailjet API v3.1. Retorna (ok, error_msg)."""
+def enviar_email_mailjet(to_email: str, subject: str, html_body: str, text_body: str,
+                         inline_png: Optional[bytes] = None, inline_cid: str = "mapa-estado") -> tuple[bool, str]:
+    """Envia un correo via Mailjet API v3.1. Retorna (ok, error_msg).
+
+    Si inline_png se provee, se adjunta como imagen inline referenciable en el
+    HTML con <img src="cid:{inline_cid}">.
+    """
     if not all([MAILJET_API_KEY, MAILJET_API_SECRET, MAILJET_FROM_EMAIL]):
         return False, "Mailjet no configurado (faltan env vars)"
-    payload = {"Messages": [{
+    import base64 as _b64
+    msg = {
         "From": {"Email": MAILJET_FROM_EMAIL, "Name": MAILJET_FROM_NAME},
         "To": [{"Email": to_email}],
         "Subject": subject,
         "TextPart": text_body,
         "HTMLPart": html_body,
-    }]}
+    }
+    if inline_png:
+        msg["InlinedAttachments"] = [{
+            "ContentType": "image/png",
+            "Filename": "mapa_riesgo_nl.png",
+            "ContentID": inline_cid,
+            "Base64Content": _b64.b64encode(inline_png).decode("ascii"),
+        }]
+    payload = {"Messages": [msg]}
     try:
         resp = requests.post(
             "https://api.mailjet.com/v3.1/send",
@@ -917,15 +1024,92 @@ def enviar_email_mailjet(to_email: str, subject: str, html_body: str, text_body:
         return False, str(e)
 
 
-def _bloque_muni(p: dict, predicciones_ml_por_cve: dict) -> tuple[str, str]:
-    """Genera (html, text) para un municipio combinando prediccion reglas + ML."""
+def generar_mapa_estado_png(predicciones: list, municipios_geom: list, fecha_iso: str) -> Optional[bytes]:
+    """
+    Genera una imagen PNG del estado de NL coloreada por nivel de riesgo por muni.
+    Devuelve bytes del PNG o None si falla. Usa matplotlib (puro, sin geopandas).
+    """
+    try:
+        import io
+        import matplotlib
+        matplotlib.use("Agg")  # no display
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Polygon as MplPolygon
+        from matplotlib.collections import PatchCollection
+        from matplotlib.lines import Line2D
+    except ImportError as e:
+        log.warning(f"matplotlib no disponible, sin mapa embebido: {e}")
+        return None
+
+    # Niveles por cve
+    nivel_por_cve = {p["cve_muni"]: p["nivel"] for p in predicciones}
+
+    fig, ax = plt.subplots(figsize=(8, 10), dpi=110)
+    fig.patch.set_facecolor("#ffffff")
+    ax.set_facecolor("#f5f5f0")
+
+    # Dibujar cada polygon (WGS84)
+    for cve, geom in municipios_geom:
+        nivel = nivel_por_cve.get(cve, "BAJO")
+        color = NIVEL_COLOR_HEX.get(nivel, "#999999")
+        # geom puede ser Polygon o MultiPolygon
+        def _draw_polygon(poly):
+            ext = list(poly.exterior.coords)
+            p = MplPolygon(ext, closed=True, facecolor=color, edgecolor="white", linewidth=0.6, alpha=0.92)
+            ax.add_patch(p)
+        if geom.geom_type == "Polygon":
+            _draw_polygon(geom)
+        elif geom.geom_type == "MultiPolygon":
+            for sub in geom.geoms:
+                _draw_polygon(sub)
+
+    ax.set_aspect("equal")
+    # bbox NL
+    ax.set_xlim(-101.4, -98.3)
+    ax.set_ylim(23.1, 27.9)
+    ax.set_xticks([]); ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    # Titulo
+    ax.set_title(f"Nuevo Leon — Riesgo de incendio {fecha_iso}",
+                 fontsize=13, pad=12, color="#1A7A6E", fontweight="500")
+
+    # Leyenda
+    legend_elements = [
+        Line2D([0],[0], marker='s', color='w', markerfacecolor=NIVEL_COLOR_HEX["BAJO"], markersize=10, label='Bajo'),
+        Line2D([0],[0], marker='s', color='w', markerfacecolor=NIVEL_COLOR_HEX["MEDIO"], markersize=10, label='Medio'),
+        Line2D([0],[0], marker='s', color='w', markerfacecolor=NIVEL_COLOR_HEX["ALTO"], markersize=10, label='Alto'),
+        Line2D([0],[0], marker='s', color='w', markerfacecolor=NIVEL_COLOR_HEX["MUY_ALTO"], markersize=10, label='Muy alto'),
+        Line2D([0],[0], marker='s', color='w', markerfacecolor=NIVEL_COLOR_HEX["EXTREMO"], markersize=10, label='Extremo'),
+    ]
+    ax.legend(handles=legend_elements, loc='lower left', frameon=True,
+              fontsize=9, facecolor="white", edgecolor="#e0e0d8",
+              labelcolor="#2c2c2a")
+
+    # Footer
+    fig.text(0.5, 0.02,
+             "Sistema de Prediccion de Incendios — BIOIMPACT / SEMA NL",
+             ha='center', fontsize=8, color="#73726c")
+
+    buf = io.BytesIO()
+    plt.tight_layout(rect=[0, 0.04, 1, 1])
+    plt.savefig(buf, format="png", dpi=110, bbox_inches='tight', facecolor=fig.get_facecolor())
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+
+def _bloque_muni(p: dict, predicciones_ml_por_cve: dict, fecha: date) -> tuple[str, str]:
+    """Genera (html, text) para un municipio combinando prediccion reglas + ML,
+    con explicacion completa y contexto historico CONAFOR."""
     nom = p.get("muni_nombre", p.get("cve_muni", ""))
+    cve = p.get("cve_muni", "")
     f = p.get("features", {})
     prob_reglas = p.get("prob", 0) * 100
     nivel_reglas = p.get("nivel", "BAJO").replace("_", " ")
 
-    # ML correspondiente
-    ml = predicciones_ml_por_cve.get(p["cve_muni"])
+    ml = predicciones_ml_por_cve.get(cve)
     if ml:
         prob_ml = ml["prob"] * 100
         nivel_ml = ml["nivel"].replace("_", " ")
@@ -933,46 +1117,40 @@ def _bloque_muni(p: dict, predicciones_ml_por_cve: dict) -> tuple[str, str]:
         prob_ml = None
         nivel_ml = None
 
-    # Explicacion operativa: causas climaticas dominantes + factor
-    razones = []
-    dsl = f.get("dias_sin_lluvia")
-    if dsl and dsl >= 14: razones.append(f"{dsl} dias sin lluvia")
-    elif dsl and dsl >= 7: razones.append(f"{dsl} dias sin lluvia")
-    temp = f.get("temp_max")
-    if temp and temp >= 35: razones.append(f"{temp}°C maxima")
-    hum = f.get("humedad_min")
-    if hum is not None and hum <= 25: razones.append(f"{hum}% humedad")
-    viento = f.get("viento_max")
-    if viento and viento >= 30: razones.append(f"viento {viento} km/h")
-    hs = f.get("n_hotspots_24h", 0)
-    if hs >= 1: razones.append(f"{hs} hotspot{'s' if hs>1 else ''} satelital{'es' if hs>1 else ''} 24h")
+    # Color del badge segun nivel (usar el mas alto entre reglas y ML para destacar)
+    nivel_destacado = p.get("nivel", "BAJO")
+    if ml and NIVEL_ORDER.get(ml.get("nivel","BAJO"),0) > NIVEL_ORDER.get(nivel_destacado,0):
+        nivel_destacado = ml["nivel"]
+    color_badge = NIVEL_COLOR_HEX.get(nivel_destacado, "#999")
+
+    # Explicacion COMPLETA en lenguaje natural
     etiquetas_fa = p.get("factor_etiquetas", []) or []
     pts_fa = p.get("factor_pts", 0) or 0
-    if pts_fa > 0 and etiquetas_fa:
-        razones.append(f"+{pts_fa} pts por {', '.join(etiquetas_fa).lower()}")
-    razon_txt = "; ".join(razones) if razones else "patron estacional y geografia"
+    explicacion = explicar_condiciones_suscriptor(f, cve, fecha, pts_fa, etiquetas_fa)
 
     # HTML
-    ml_html = f"<br/><strong>Prediccion ML:</strong> {nivel_ml} ({prob_ml:.0f}%)" if ml else ""
+    ml_html = f"<div style='font-size:13px;margin-top:3px'><strong>Prediccion ML:</strong> {_html_escape(nivel_ml)} ({prob_ml:.0f}%)</div>" if ml else ""
     html = (
-        f"<div style='border:1px solid #e0e0d8;border-radius:8px;padding:12px;margin:10px 0;background:#fff'>"
-        f"<div style='font-weight:600;color:#1A7A6E;font-size:15px'>{_html_escape(nom)}</div>"
-        f"<div style='font-size:13px;margin-top:6px'>"
-        f"<strong>Condiciones climaticas:</strong> {_html_escape(nivel_reglas)} ({prob_reglas:.0f}%){ml_html}"
+        f"<div style='border:1px solid #e0e0d8;border-left:4px solid {color_badge};border-radius:8px;padding:14px;margin:12px 0;background:#fff'>"
+        f"<div style='font-weight:600;color:#1A7A6E;font-size:16px'>{_html_escape(nom)}</div>"
+        f"<div style='font-size:13px;margin-top:8px'>"
+        f"<strong>Condiciones climaticas:</strong> {_html_escape(nivel_reglas)} ({prob_reglas:.0f}%)"
         f"</div>"
-        f"<div style='font-size:12px;color:#555;margin-top:6px;line-height:1.5'>"
-        f"<em>Por que:</em> {_html_escape(razon_txt)}"
+        f"{ml_html}"
+        f"<div style='font-size:13px;color:#444;margin-top:10px;line-height:1.55'>"
+        f"{_html_escape(explicacion)}"
         f"</div></div>"
     )
     # Text
     text = f"{nom}\n  Condiciones climaticas: {nivel_reglas} ({prob_reglas:.0f}%)"
     if ml:
         text += f"\n  Prediccion ML: {nivel_ml} ({prob_ml:.0f}%)"
-    text += f"\n  Por que: {razon_txt}\n"
+    text += f"\n  {explicacion}\n"
     return html, text
 
 
-def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_ml: list, fecha_iso: str) -> tuple[str, str, str, int, int]:
+def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_ml: list,
+                             fecha_iso: str, incluir_mapa: bool = True) -> tuple[str, str, str, int, int]:
     """
     Arma (asunto, html, text, n_munis_reportados, n_alertas) para un suscriptor.
     Primera parte: sus municipios seleccionados con detalle.
@@ -1032,15 +1210,27 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
         f"<h2 style='font-size:15px;font-weight:600;color:#1A7A6E;margin:16px 0 6px;border-bottom:1px solid #e0e0d8;padding-bottom:6px'>{_html_escape(titulo_primer_bloque)}</h2>",
     ]
 
+    fecha_obj = date.fromisoformat(fecha_iso) if isinstance(fecha_iso, str) else fecha_iso
     if munis_mostrar:
         for p in munis_mostrar:
-            h, _ = _bloque_muni(p, ml_por_cve)
+            h, _ = _bloque_muni(p, ml_por_cve, fecha_obj)
             html_parts.append(h)
     else:
         html_parts.append("<p style='color:#666;font-size:13px'>Sin municipios con riesgo elevado en tu seleccion hoy.</p>")
 
     # Panorama
     html_parts.append(f"<h2 style='font-size:15px;font-weight:600;color:#1A7A6E;margin:24px 0 8px;border-bottom:1px solid #e0e0d8;padding-bottom:6px'>Panorama general del estado</h2>")
+
+    # Mapa inline (si hay attachment configurado)
+    if incluir_mapa:
+        html_parts.append(
+            f"<div style='text-align:center;margin:12px 0 18px'>"
+            f"<img src='cid:mapa-estado' alt='Mapa de riesgo Nuevo Leon' "
+            f"style='max-width:100%;height:auto;border:1px solid #e0e0d8;border-radius:8px'/>"
+            f"<div style='font-size:11px;color:#73726c;margin-top:4px'>"
+            f"Niveles del modelo de reglas (condiciones climaticas + factor humano) para hoy."
+            f"</div></div>"
+        )
     for nivel, emoji, color in [("EXTREMO","🔴","#D90429"),("MUY_ALTO","🟠","#E8600A"),("ALTO","🟡","#E5A100"),("MEDIO","🔵","#2B9348")]:
         if niveles_counts[nivel]:
             lista = ", ".join(_html_escape(x) for x in nombres_por_nivel[nivel])
@@ -1100,7 +1290,9 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
     return subject, html, text, len(munis_mostrar), alertas_personales
 
 
-def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list, predicciones_ml: list, fecha_iso: str) -> None:
+def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list,
+                                predicciones_ml: list, fecha_iso: str,
+                                municipios_geom: list) -> None:
     """Consulta suscriptores activos y envia correo personalizado via Mailjet."""
     if not all([MAILJET_API_KEY, MAILJET_API_SECRET, MAILJET_FROM_EMAIL]):
         log.info("Mailjet no configurado; se omite envio a suscriptores")
@@ -1119,6 +1311,17 @@ def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list, predic
         log.info("Sin suscriptores activos")
         return
 
+    # Generar mapa una vez (se reutiliza en todos los correos)
+    mapa_png = None
+    if municipios_geom:
+        try:
+            mapa_png = generar_mapa_estado_png(predicciones, municipios_geom, fecha_iso)
+            if mapa_png:
+                log.info(f"Mapa PNG generado ({len(mapa_png)} bytes)")
+        except Exception as e:
+            log.error(f"Error generando mapa PNG: {e}")
+            mapa_png = None
+
     log.info(f"Procesando {len(subs)} suscriptores...")
     enviados = 0
     omitidos = 0
@@ -1127,7 +1330,8 @@ def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list, predic
     for sub in subs:
         try:
             subject, html, text, n_munis, n_alertas = generar_email_suscriptor(
-                sub, predicciones, predicciones_ml, fecha_iso
+                sub, predicciones, predicciones_ml, fecha_iso,
+                incluir_mapa=(mapa_png is not None)
             )
 
             # Si cadencia es solo_alertas y no hay alertas personales relevantes, omitir
@@ -1135,7 +1339,8 @@ def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list, predic
                 omitidos += 1
                 continue
 
-            ok, err = enviar_email_mailjet(sub["email"], subject, html, text)
+            ok, err = enviar_email_mailjet(sub["email"], subject, html, text,
+                                           inline_png=mapa_png)
             status = "sent" if ok else "failed"
             if ok:
                 enviados += 1
@@ -1523,7 +1728,8 @@ def main():
 
     # Paso 8: Envio personalizado a suscriptores publicos via Mailjet
     try:
-        enviar_resumen_suscriptores(sb, predicciones, predicciones_ml, date.today().isoformat())
+        enviar_resumen_suscriptores(sb, predicciones, predicciones_ml,
+                                    date.today().isoformat(), municipios_geom)
     except Exception as e:
         log.error(f"Error enviando a suscriptores: {e}")
 
