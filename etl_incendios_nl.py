@@ -758,7 +758,7 @@ def generar_mensaje(pred: dict, contacto: dict) -> str:
         f"- Hotspots activos 24h: {f.get('n_hotspots_24h', 0)}\n\n"
         f"Se recomienda activar protocolos preventivos.\n"
         f"Dashboard: https://incendios-nl.netlify.app\n\n"
-        f"— Sistema de Prediccion de Incendios, BIOIMPACT / SEMA NL"
+        f"— Sistema de Prediccion de Incendios, SEMA Nuevo Leon"
     )
 
 
@@ -794,7 +794,7 @@ def generar_resumen_diario(predicciones: list) -> str:
             )
 
     lineas.append(f"\nDashboard: https://incendios-nl.netlify.app")
-    lineas.append("— BIOIMPACT / SEMA NL")
+    lineas.append("— SEMA Nuevo Leon")
     return "\n".join(lineas)
 
 
@@ -1089,7 +1089,7 @@ def generar_mapa_estado_png(predicciones: list, municipios_geom: list, fecha_iso
 
     # Footer
     fig.text(0.5, 0.02,
-             "Sistema de Prediccion de Incendios — BIOIMPACT / SEMA NL",
+             "Sistema de Prediccion de Incendios — SEMA Nuevo Leon",
              ha='center', fontsize=8, color="#73726c")
 
     buf = io.BytesIO()
@@ -1231,12 +1231,16 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
             f"Niveles del modelo de reglas (condiciones climaticas + factor humano) para hoy."
             f"</div></div>"
         )
-    for nivel, emoji, color in [("EXTREMO","🔴","#D90429"),("MUY_ALTO","🟠","#E8600A"),("ALTO","🟡","#E5A100"),("MEDIO","🔵","#2B9348")]:
+    # Dots de color CSS que matchean exactamente los colores del mapa PNG
+    for nivel in ["EXTREMO", "MUY_ALTO", "ALTO", "MEDIO"]:
         if niveles_counts[nivel]:
+            color = NIVEL_COLOR_HEX.get(nivel, "#999")
             lista = ", ".join(_html_escape(x) for x in nombres_por_nivel[nivel])
+            dot = (f"<span style='display:inline-block;width:11px;height:11px;background:{color};"
+                   f"border-radius:50%;vertical-align:middle;margin-right:6px'></span>")
             html_parts.append(
                 f"<div style='margin:6px 0;font-size:13px'>"
-                f"<span style='color:{color};font-weight:600'>{emoji} {nivel.replace('_',' ')}</span> "
+                f"{dot}<span style='color:{color};font-weight:600'>{nivel.replace('_',' ')}</span> "
                 f"({niveles_counts[nivel]}): {lista}</div>"
             )
     if not any(niveles_counts[n] for n in ["EXTREMO","MUY_ALTO","ALTO","MEDIO"]):
@@ -1249,7 +1253,7 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
         f"Recibes este correo porque te suscribiste en <a href='{DASHBOARD_URL}' style='color:#1A7A6E'>{DASHBOARD_URL}</a>. ",
         f"Puedes <a href='{DASHBOARD_URL}/preferencias.html' style='color:#1A7A6E'>cambiar tus preferencias</a> o ",
         f"<a href='{DASHBOARD_URL}/desuscribir.html?token={sub['unsubscribe_token']}' style='color:#1A7A6E'>darte de baja</a> con un solo click.<br/>",
-        f"Sistema de Prediccion de Incendios — BIOIMPACT / SEMA NL",
+        f"Sistema de Prediccion de Incendios — SEMA Nuevo Leon",
         f"</div>",
         f"</div></body>",
     ])
