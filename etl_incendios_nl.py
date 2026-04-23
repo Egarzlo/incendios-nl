@@ -1231,12 +1231,16 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
             f"Niveles del modelo de reglas (condiciones climaticas + factor humano) para hoy."
             f"</div></div>"
         )
-    for nivel, emoji, color in [("EXTREMO","🔴","#D90429"),("MUY_ALTO","🟠","#E8600A"),("ALTO","🟡","#E5A100"),("MEDIO","🔵","#2B9348")]:
+    # Dots de color CSS que matchean exactamente los colores del mapa PNG
+    for nivel in ["EXTREMO", "MUY_ALTO", "ALTO", "MEDIO"]:
         if niveles_counts[nivel]:
+            color = NIVEL_COLOR_HEX.get(nivel, "#999")
             lista = ", ".join(_html_escape(x) for x in nombres_por_nivel[nivel])
+            dot = (f"<span style='display:inline-block;width:11px;height:11px;background:{color};"
+                   f"border-radius:50%;vertical-align:middle;margin-right:6px'></span>")
             html_parts.append(
                 f"<div style='margin:6px 0;font-size:13px'>"
-                f"<span style='color:{color};font-weight:600'>{emoji} {nivel.replace('_',' ')}</span> "
+                f"{dot}<span style='color:{color};font-weight:600'>{nivel.replace('_',' ')}</span> "
                 f"({niveles_counts[nivel]}): {lista}</div>"
             )
     if not any(niveles_counts[n] for n in ["EXTREMO","MUY_ALTO","ALTO","MEDIO"]):
