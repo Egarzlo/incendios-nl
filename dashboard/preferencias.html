@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preferencias — Alertas Incendios NL</title>
+    <style>
+        :root {
+            --teal: #1A7A6E; --teal-light: #E1F5EE;
+            --bg: #f5f5f0; --card: #ffffff; --border: #e0e0d8;
+            --text: #2c2c2a; --text-secondary: #73726c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display:flex; flex-direction:column; }
+
+        .header {
+            background: var(--teal); color: white;
+            padding: 1.25rem 2rem;
+            display: flex; align-items: center; gap: 1rem;
+        }
+        .header a { color: white; text-decoration: none; }
+        .header h1 { font-size: 1.2rem; font-weight: 500; }
+
+        main { flex: 1; max-width: 780px; width:100%; margin: 0 auto; padding: 1.5rem 1rem; }
+
+        .card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 1.5rem;
+            margin-bottom: 1.25rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        h2 { font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem; }
+        h3 { font-size: 0.95rem; font-weight: 500; margin: 1.25rem 0 0.5rem; color: var(--teal); }
+        p.lead { color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.5; font-size: 0.88rem; }
+
+        label { display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.3rem; font-weight: 500; }
+        input[type=text], select {
+            width: 100%; padding: 0.6rem 0.8rem;
+            border: 1px solid var(--border); border-radius: 8px;
+            font-size: 0.9rem; font-family: inherit; background: white;
+        }
+        input[type=text]:focus, select:focus { outline: 2px solid var(--teal); border-color: var(--teal); }
+
+        .muni-group-toggle {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.55rem 0.75rem; margin-top: 0.75rem;
+            background: var(--teal-light); border-radius: 6px;
+            font-size: 0.82rem; color: var(--teal); font-weight: 500;
+            cursor: pointer;
+        }
+        .muni-group-toggle input { accent-color: var(--teal); }
+        .muni-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.4rem 1rem;
+            margin-top: 0.5rem; margin-bottom: 0.5rem;
+        }
+        .muni-checkbox {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.25rem 0.1rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .muni-checkbox input { accent-color: var(--teal); width:16px; height:16px; cursor:pointer; }
+        .muni-checkbox:hover { color: var(--teal); }
+
+        .radio-row { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
+        .radio-item {
+            display: flex; align-items: flex-start; gap: 0.6rem;
+            padding: 0.6rem 0.8rem;
+            border: 1px solid var(--border); border-radius: 8px;
+            cursor: pointer; font-size: 0.9rem;
+        }
+        .radio-item:hover { border-color: var(--teal); }
+        .radio-item input { accent-color: var(--teal); margin-top: 3px; }
+        .radio-item strong { display: block; margin-bottom: 0.15rem; }
+        .radio-item small { color: var(--text-secondary); font-size: 0.78rem; line-height: 1.4; }
+
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        @media (max-width: 500px) { .two-col { grid-template-columns: 1fr; } }
+
+        .actions { display: flex; gap: 0.6rem; margin-top: 1.25rem; flex-wrap: wrap; }
+        button {
+            padding: 0.75rem 1.25rem; border-radius: 8px; border: 1px solid var(--border);
+            font-size: 0.9rem; font-weight: 500; cursor: pointer; font-family: inherit;
+            background: white; color: var(--text);
+        }
+        button.primary { background: var(--teal); color: white; border-color: var(--teal); }
+        button.primary:hover { background: #145a52; }
+        button.danger  { background: transparent; color: #c0392b; border-color: transparent; }
+        button.danger:hover  { text-decoration: underline; }
+
+        .alert {
+            margin-top: 1rem;
+            padding: 0.75rem 1rem; border-radius: 8px;
+            font-size: 0.88rem; line-height: 1.4;
+            display: none;
+        }
+        .alert.ok  { background: #D8F3DC; color: #1B4332; display: block; }
+        .alert.err { background: #FFD6DE; color: #6B0218; display: block; }
+        .alert.info{ background: var(--teal-light); color: var(--teal); display: block; }
+
+        .loading { text-align: center; padding: 3rem; color: var(--text-secondary); }
+        .app-footer {
+            text-align: center; padding: 1rem;
+            color: var(--text-secondary); font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="/">←</a>
+        <h1>Preferencias de alerta</h1>
+    </div>
+
+    <main>
+        <div id="loading" class="loading">Cargando...</div>
+        <div id="content" style="display:none">
+            <div class="card">
+                <h2>Hola <span id="user-email"></span></h2>
+                <p class="lead">Configura que municipios quieres monitorear y con que frecuencia. Puedes cambiar o cancelar tu suscripcion cuando quieras.</p>
+
+                <label for="nombre">Nombre (opcional, para personalizar el correo)</label>
+                <input type="text" id="nombre" placeholder="Tu nombre o puesto"/>
+            </div>
+
+            <div class="card">
+                <h2>Municipios de interes</h2>
+                <p class="lead">
+                    Marca los municipios cuya situacion te interesa. Apareceran al inicio del correo con su pronostico detallado. Despues viene el panorama general del estado.
+                </p>
+
+                <label class="muni-group-toggle"><input type="checkbox" id="select-all"/> Seleccionar los 51 municipios</label>
+
+                <div id="muni-groups"></div>
+            </div>
+
+            <div class="card">
+                <h2>Cuando recibir el correo</h2>
+                <div class="radio-row">
+                    <label class="radio-item">
+                        <input type="radio" name="cadencia" value="solo_alertas" checked/>
+                        <span><strong>Solo cuando haya alertas</strong>
+                            <small>Recibiras correo unicamente los dias en que al menos uno de tus municipios alcance el nivel minimo que elijas abajo. Menos ruido, mas relevante.</small></span>
+                    </label>
+                    <label class="radio-item">
+                        <input type="radio" name="cadencia" value="diario"/>
+                        <span><strong>Diariamente, haya o no alertas</strong>
+                            <small>Te llegara el resumen todos los dias, util para monitoreo continuo.</small></span>
+                    </label>
+                </div>
+
+                <label for="nivel_minimo">Nivel minimo para considerar "alerta"</label>
+                <select id="nivel_minimo">
+                    <option value="MEDIO">MEDIO (probabilidad ≥ 20%)</option>
+                    <option value="ALTO" selected>ALTO (probabilidad ≥ 40%)</option>
+                    <option value="MUY_ALTO">MUY ALTO (probabilidad ≥ 60%)</option>
+                    <option value="EXTREMO">EXTREMO (probabilidad ≥ 80%)</option>
+                </select>
+            </div>
+
+            <div class="card">
+                <div class="actions">
+                    <button type="button" class="primary" id="btn-save">Guardar preferencias</button>
+                    <button type="button" id="btn-logout">Cerrar sesion</button>
+                    <button type="button" class="danger" id="btn-unsubscribe">Darme de baja</button>
+                </div>
+                <div id="alert" class="alert"></div>
+            </div>
+        </div>
+    </main>
+
+    <div class="app-footer">Sistema de Prediccion de Incendios — BIOIMPACT / SEMA NL</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL      = 'https://rgskntzjsrqbeszeyvwo.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnc2tudHpqc3JxYmVzemV5dndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTAyMzEsImV4cCI6MjA4OTk2NjIzMX0.Bow5fil8hnR2T4mZBHabHKMzzCtI_rejNiCMGCFo4Bg';
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Municipios agrupados por ecoregion (misma logica del dashboard)
+        const GROUPS = {
+            'Area Metropolitana de Monterrey': [
+                ['039','Monterrey'],['019','San Pedro Garza García'],['046','San Nicolás de los Garza'],
+                ['026','Guadalupe'],['006','Apodaca'],['021','General Escobedo'],
+                ['048','Santa Catarina'],['018','García'],['031','Juárez']
+            ],
+            'Periurbanos y valles (AMM extendido)': [
+                ['009','Cadereyta Jiménez'],['045','Salinas Victoria'],['012','Ciénega de Flores'],
+                ['041','Pesquería'],['010','El Carmen'],['025','General Zuazua'],
+                ['001','Abasolo'],['034','Marín'],['028','Higueras'],['047','Hidalgo']
+            ],
+            'Zona Cítrica y piedemonte sur (R3)': [
+                ['004','Allende'],['038','Montemorelos'],['033','Linares'],
+                ['029','Hualahuises'],['022','General Terán'],['049','Santiago']
+            ],
+            'Sierra Madre Oriental (R4)': [
+                ['017','Galeana'],['030','Iturbide'],['043','Rayones']
+            ],
+            'Altiplano sur (R5)': [
+                ['007','Aramberri'],['014','Doctor Arroyo'],['024','General Zaragoza'],['036','Mier y Noriega']
+            ],
+            'Norte y Frontera (llanos)': [
+                ['005','Anáhuac'],['032','Lampazos de Naranjo'],['008','Bustamante'],
+                ['051','Villaldama'],['044','Sabinas Hidalgo'],['050','Vallecillo'],
+                ['037','Mina']
+            ],
+            'Noreste y llanos (R1)': [
+                ['002','Agualeguas'],['011','Cerralvo'],['040','Parás'],['023','General Treviño'],
+                ['003','Los Aldamas'],['027','Los Herreras'],['035','Melchor Ocampo'],
+                ['015','Doctor Coss'],['013','China'],['020','General Bravo'],
+                ['042','Los Ramones'],['016','Doctor González']
+            ],
+        };
+
+        const $ = (id) => document.getElementById(id);
+        const alertBox = $('alert');
+        function showAlert(msg, kind='ok') {
+            alertBox.className = 'alert ' + kind;
+            alertBox.textContent = msg;
+            setTimeout(() => { if (kind==='ok') alertBox.style.display = 'none'; }, 5000);
+        }
+
+        function renderMuniGroups(selected) {
+            const selSet = new Set(selected);
+            const container = $('muni-groups');
+            container.innerHTML = '';
+            for (const [groupName, munis] of Object.entries(GROUPS)) {
+                const div = document.createElement('div');
+                div.innerHTML = `<h3>${groupName}</h3>`;
+                const grid = document.createElement('div');
+                grid.className = 'muni-grid';
+                munis.forEach(([cve, nombre]) => {
+                    const label = document.createElement('label');
+                    label.className = 'muni-checkbox';
+                    const checked = selSet.has(cve) || selSet.has('*');
+                    label.innerHTML = `<input type="checkbox" value="${cve}" ${checked?'checked':''}/>${nombre}`;
+                    grid.appendChild(label);
+                });
+                div.appendChild(grid);
+                container.appendChild(div);
+            }
+        }
+
+        function getSelectedMunis() {
+            const all = $('select-all').checked;
+            if (all) return ['*'];
+            const cves = [];
+            document.querySelectorAll('#muni-groups input[type=checkbox]').forEach(cb => {
+                if (cb.checked) cves.push(cb.value);
+            });
+            return cves;
+        }
+
+        async function init() {
+            // Capturar el hash de la url (Supabase usa #access_token=...)
+            const { data: { session }, error } = await sb.auth.getSession();
+            if (error || !session) {
+                // Sin sesion → volver a registro
+                location.href = '/registro.html';
+                return;
+            }
+
+            $('loading').style.display = 'none';
+            $('content').style.display = 'block';
+            $('user-email').textContent = session.user.email;
+
+            // Cargar fila existente (si hay)
+            const { data: rows } = await sb.from('suscriptores').select('*').eq('id', session.user.id);
+            const row = rows && rows[0];
+            if (row) {
+                $('nombre').value = row.nombre || '';
+                renderMuniGroups(row.municipios_cve || ['*']);
+                $('select-all').checked = row.municipios_cve && row.municipios_cve.includes('*');
+                document.querySelector(`input[name=cadencia][value="${row.cadencia}"]`).checked = true;
+                $('nivel_minimo').value = row.nivel_minimo;
+            } else {
+                renderMuniGroups(['*']);
+                $('select-all').checked = true;
+            }
+
+            // Handlers
+            $('select-all').addEventListener('change', (e) => {
+                const on = e.target.checked;
+                document.querySelectorAll('#muni-groups input[type=checkbox]').forEach(cb => { cb.checked = on; });
+            });
+            document.querySelectorAll('#muni-groups input[type=checkbox]').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    // Si alguno se desmarca, quitar el select-all
+                    if (!cb.checked) $('select-all').checked = false;
+                    // Si todos marcados, marcar select-all
+                    const all = Array.from(document.querySelectorAll('#muni-groups input[type=checkbox]')).every(c => c.checked);
+                    if (all) $('select-all').checked = true;
+                });
+            });
+
+            $('btn-save').addEventListener('click', async () => {
+                const munis = getSelectedMunis();
+                if (!munis.length) {
+                    showAlert('Selecciona al menos un municipio o marca "Seleccionar los 51".', 'err');
+                    return;
+                }
+                const payload = {
+                    id: session.user.id,
+                    email: session.user.email,
+                    nombre: $('nombre').value.trim() || null,
+                    municipios_cve: munis,
+                    cadencia: document.querySelector('input[name=cadencia]:checked').value,
+                    nivel_minimo: $('nivel_minimo').value,
+                    activo: true,
+                };
+                const { error } = await sb.from('suscriptores').upsert(payload, { onConflict: 'id' });
+                if (error) showAlert('Error al guardar: ' + error.message, 'err');
+                else showAlert('Preferencias guardadas. Recibiras alertas segun tu configuracion.', 'ok');
+            });
+
+            $('btn-logout').addEventListener('click', async () => {
+                await sb.auth.signOut();
+                location.href = '/';
+            });
+
+            $('btn-unsubscribe').addEventListener('click', async () => {
+                if (!confirm('¿Seguro que quieres darte de baja? Dejaras de recibir correos.')) return;
+                const { error } = await sb.from('suscriptores').update({ activo: false }).eq('id', session.user.id);
+                if (error) showAlert('Error: ' + error.message, 'err');
+                else {
+                    showAlert('Listo, ya no recibiras mas correos. Puedes reactivar cuando quieras volviendo a iniciar sesion.', 'info');
+                }
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
