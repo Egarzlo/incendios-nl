@@ -45,9 +45,21 @@
         }
         .header h1 { font-size: 1.35rem; font-weight: 500; }
         .header p { font-size: 0.8rem; opacity: 0.8; }
-        .header-right { text-align: right; }
+        .header-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; }
         .header-right .fecha { font-size: 0.9rem; font-weight: 500; }
         .header-right .hora { font-size: 0.75rem; opacity: 0.7; }
+        .subscribe-btn {
+            display: inline-block;
+            background: rgba(255,255,255,0.18);
+            color: white;
+            padding: 0.45rem 0.9rem;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            text-decoration: none;
+            border: 1px solid rgba(255,255,255,0.35);
+            font-weight: 500;
+        }
+        .subscribe-btn:hover { background: rgba(255,255,255,0.28); }
 
         nav {
             background: var(--card);
@@ -364,6 +376,7 @@
             <p>Nuevo Leon  —  Actualizacion diaria 6:00 AM</p>
         </div>
         <div class="header-right">
+            <a href="/registro.html" class="subscribe-btn">Suscribirse a alertas</a>
             <div class="fecha" id="fecha-display">Cargando...</div>
             <div class="hora">Proxima actualizacion: 6:00 AM CST</div>
         </div>

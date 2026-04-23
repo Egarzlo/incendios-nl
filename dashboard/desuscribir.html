@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baja de alertas — Incendios NL</title>
+    <style>
+        :root { --teal: #1A7A6E; --bg: #f5f5f0; --card: #fff; --border: #e0e0d8;
+                --text: #2c2c2a; --text-secondary: #73726c; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+        .header { background: var(--teal); color: white; padding: 1.25rem 2rem; }
+        .header h1 { font-size: 1.2rem; font-weight: 500; }
+        main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; max-width: 520px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .card h2 { font-size: 1.3rem; font-weight: 500; margin-bottom: 0.75rem; }
+        .card p  { color: var(--text-secondary); line-height: 1.5; margin-bottom: 1rem; }
+        .card strong { color: var(--text); }
+        .card .emoji { font-size: 2.5rem; display:block; margin-bottom: 0.5rem; }
+        .card a.back { color: var(--teal); font-weight: 500; }
+        .loading { color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <div class="header"><h1>Baja de alertas</h1></div>
+    <main>
+        <div class="card" id="card">
+            <p class="loading">Procesando tu baja...</p>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL      = 'https://rgskntzjsrqbeszeyvwo.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnc2tudHpqc3JxYmVzemV5dndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTAyMzEsImV4cCI6MjA4OTk2NjIzMX0.Bow5fil8hnR2T4mZBHabHKMzzCtI_rejNiCMGCFo4Bg';
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const params = new URLSearchParams(location.search);
+        const token = params.get('token');
+        const card = document.getElementById('card');
+
+        async function run() {
+            if (!token) {
+                card.innerHTML = `<span class="emoji">⚠️</span>
+                    <h2>Enlace invalido</h2>
+                    <p>Este enlace no incluye un token de baja. Si llegaste aqui desde un correo nuestro, intenta copiar el enlace completo.</p>
+                    <p><a class="back" href="/registro.html">Administrar suscripcion</a></p>`;
+                return;
+            }
+            try {
+                const { data, error } = await sb.rpc('unsubscribe_by_token', { p_token: token });
+                if (error) throw error;
+                const row = data && data[0];
+                if (row && row.success) {
+                    card.innerHTML = `<span class="emoji">✓</span>
+                        <h2>Listo, te has dado de baja</h2>
+                        <p>Ya no recibiras mas correos de alertas para <strong>${row.email}</strong>.</p>
+                        <p>Si cambias de opinion, puedes volver a suscribirte en cualquier momento.</p>
+                        <p><a class="back" href="/registro.html">Volver a suscribirme</a></p>`;
+                } else {
+                    card.innerHTML = `<span class="emoji">⚠️</span>
+                        <h2>Enlace no valido o expirado</h2>
+                        <p>No encontramos un suscriptor activo con este token. Puede que ya te hayas dado de baja antes.</p>
+                        <p><a class="back" href="/registro.html">Gestionar mi suscripcion</a></p>`;
+                }
+            } catch (e) {
+                card.innerHTML = `<span class="emoji">✗</span>
+                    <h2>Error al procesar la baja</h2>
+                    <p>${e.message || e}</p>
+                    <p>Si el problema persiste, inicia sesion en <a class="back" href="/preferencias.html">preferencias</a> y da de baja desde ahi.</p>`;
+            }
+        }
+        run();
+    </script>
+</body>
+</html>

@@ -52,6 +52,11 @@ jobs:
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
           TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+          MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
+          MAILJET_API_SECRET: ${{ secrets.MAILJET_API_SECRET }}
+          MAILJET_FROM_EMAIL: ${{ secrets.MAILJET_FROM_EMAIL }}
+          MAILJET_FROM_NAME: ${{ secrets.MAILJET_FROM_NAME }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
         run: python etl_incendios_nl.py
 
       - name: Subir log de ejecución

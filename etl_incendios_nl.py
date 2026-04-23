@@ -870,6 +870,297 @@ def enviar_sms(telefono: str, mensaje: str):
     return True
 
 
+# ─── Suscripciones publicas via Mailjet ────────────────────────────────────
+MAILJET_API_KEY    = os.getenv("MAILJET_API_KEY")
+MAILJET_API_SECRET = os.getenv("MAILJET_API_SECRET")
+MAILJET_FROM_EMAIL = os.getenv("MAILJET_FROM_EMAIL")
+MAILJET_FROM_NAME  = os.getenv("MAILJET_FROM_NAME", "Alertas Incendios Nuevo Leon")
+DASHBOARD_URL      = os.getenv("DASHBOARD_URL", "https://incendios-nl.netlify.app").rstrip("/")
+
+NIVEL_ORDER = {"BAJO": 0, "MEDIO": 1, "ALTO": 2, "MUY_ALTO": 3, "EXTREMO": 4}
+
+
+def _nivel_ge(n1: str, n2: str) -> bool:
+    """True si n1 >= n2 en escala de nivel."""
+    return NIVEL_ORDER.get(n1, 0) >= NIVEL_ORDER.get(n2, 0)
+
+
+def _html_escape(s):
+    if s is None:
+        return ""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;"))
+
+
+def enviar_email_mailjet(to_email: str, subject: str, html_body: str, text_body: str) -> tuple[bool, str]:
+    """Envia un correo via Mailjet API v3.1. Retorna (ok, error_msg)."""
+    if not all([MAILJET_API_KEY, MAILJET_API_SECRET, MAILJET_FROM_EMAIL]):
+        return False, "Mailjet no configurado (faltan env vars)"
+    payload = {"Messages": [{
+        "From": {"Email": MAILJET_FROM_EMAIL, "Name": MAILJET_FROM_NAME},
+        "To": [{"Email": to_email}],
+        "Subject": subject,
+        "TextPart": text_body,
+        "HTMLPart": html_body,
+    }]}
+    try:
+        resp = requests.post(
+            "https://api.mailjet.com/v3.1/send",
+            auth=(MAILJET_API_KEY, MAILJET_API_SECRET),
+            json=payload,
+            timeout=30,
+        )
+        if resp.status_code in (200, 201):
+            return True, ""
+        return False, f"HTTP {resp.status_code}: {resp.text[:200]}"
+    except Exception as e:
+        return False, str(e)
+
+
+def _bloque_muni(p: dict, predicciones_ml_por_cve: dict) -> tuple[str, str]:
+    """Genera (html, text) para un municipio combinando prediccion reglas + ML."""
+    nom = p.get("muni_nombre", p.get("cve_muni", ""))
+    f = p.get("features", {})
+    prob_reglas = p.get("prob", 0) * 100
+    nivel_reglas = p.get("nivel", "BAJO").replace("_", " ")
+
+    # ML correspondiente
+    ml = predicciones_ml_por_cve.get(p["cve_muni"])
+    if ml:
+        prob_ml = ml["prob"] * 100
+        nivel_ml = ml["nivel"].replace("_", " ")
+    else:
+        prob_ml = None
+        nivel_ml = None
+
+    # Explicacion operativa: causas climaticas dominantes + factor
+    razones = []
+    dsl = f.get("dias_sin_lluvia")
+    if dsl and dsl >= 14: razones.append(f"{dsl} dias sin lluvia")
+    elif dsl and dsl >= 7: razones.append(f"{dsl} dias sin lluvia")
+    temp = f.get("temp_max")
+    if temp and temp >= 35: razones.append(f"{temp}°C maxima")
+    hum = f.get("humedad_min")
+    if hum is not None and hum <= 25: razones.append(f"{hum}% humedad")
+    viento = f.get("viento_max")
+    if viento and viento >= 30: razones.append(f"viento {viento} km/h")
+    hs = f.get("n_hotspots_24h", 0)
+    if hs >= 1: razones.append(f"{hs} hotspot{'s' if hs>1 else ''} satelital{'es' if hs>1 else ''} 24h")
+    etiquetas_fa = p.get("factor_etiquetas", []) or []
+    pts_fa = p.get("factor_pts", 0) or 0
+    if pts_fa > 0 and etiquetas_fa:
+        razones.append(f"+{pts_fa} pts por {', '.join(etiquetas_fa).lower()}")
+    razon_txt = "; ".join(razones) if razones else "patron estacional y geografia"
+
+    # HTML
+    ml_html = f"<br/><strong>Prediccion ML:</strong> {nivel_ml} ({prob_ml:.0f}%)" if ml else ""
+    html = (
+        f"<div style='border:1px solid #e0e0d8;border-radius:8px;padding:12px;margin:10px 0;background:#fff'>"
+        f"<div style='font-weight:600;color:#1A7A6E;font-size:15px'>{_html_escape(nom)}</div>"
+        f"<div style='font-size:13px;margin-top:6px'>"
+        f"<strong>Condiciones climaticas:</strong> {_html_escape(nivel_reglas)} ({prob_reglas:.0f}%){ml_html}"
+        f"</div>"
+        f"<div style='font-size:12px;color:#555;margin-top:6px;line-height:1.5'>"
+        f"<em>Por que:</em> {_html_escape(razon_txt)}"
+        f"</div></div>"
+    )
+    # Text
+    text = f"{nom}\n  Condiciones climaticas: {nivel_reglas} ({prob_reglas:.0f}%)"
+    if ml:
+        text += f"\n  Prediccion ML: {nivel_ml} ({prob_ml:.0f}%)"
+    text += f"\n  Por que: {razon_txt}\n"
+    return html, text
+
+
+def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_ml: list, fecha_iso: str) -> tuple[str, str, str, int, int]:
+    """
+    Arma (asunto, html, text, n_munis_reportados, n_alertas) para un suscriptor.
+    Primera parte: sus municipios seleccionados con detalle.
+    Segunda parte: panorama general del estado.
+    """
+    munis_pref = set(sub.get("municipios_cve") or [])
+    todos = "*" in munis_pref
+
+    ml_por_cve = {p["cve_muni"]: p for p in predicciones_ml}
+    reglas_por_cve = {p["cve_muni"]: p for p in predicciones_reglas}
+
+    # Seleccionados: si el user eligio "*" o nada, mostramos los que superan nivel_minimo
+    if todos or not munis_pref:
+        # Default: solo los que superen nivel_minimo, top 10
+        nivel_min = sub.get("nivel_minimo", "ALTO")
+        munis_mostrar = sorted(
+            [p for p in predicciones_reglas if _nivel_ge(p["nivel"], nivel_min)],
+            key=lambda x: -x["prob"]
+        )[:10]
+        titulo_primer_bloque = f"Municipios en nivel {nivel_min.replace('_',' ')} o superior hoy"
+    else:
+        munis_mostrar = [reglas_por_cve[c] for c in munis_pref if c in reglas_por_cve]
+        munis_mostrar.sort(key=lambda x: -x["prob"])
+        titulo_primer_bloque = "Tus municipios seleccionados"
+
+    # Panorama general
+    niveles_counts = {n: 0 for n in ["EXTREMO", "MUY_ALTO", "ALTO", "MEDIO", "BAJO"]}
+    nombres_por_nivel = {n: [] for n in niveles_counts}
+    for p in predicciones_reglas:
+        n = p["nivel"]
+        niveles_counts[n] += 1
+        nombres_por_nivel[n].append(p.get("muni_nombre", p["cve_muni"]))
+
+    total_alertas = sum(niveles_counts[n] for n in ["ALTO", "MUY_ALTO", "EXTREMO"])
+    nivel_min = sub.get("nivel_minimo", "ALTO")
+    alertas_personales = sum(1 for p in munis_mostrar if _nivel_ge(p["nivel"], nivel_min))
+
+    # Asunto
+    nombre_saludo = sub.get("nombre") or "Equipo operativo"
+    if alertas_personales > 0:
+        subject = f"[INCENDIOS NL] {alertas_personales} alerta(s) en tus municipios — {fecha_iso}"
+    elif total_alertas > 0:
+        subject = f"[INCENDIOS NL] Reporte diario — {total_alertas} municipios del estado en alerta"
+    else:
+        subject = f"[INCENDIOS NL] Reporte diario — sin alertas {fecha_iso}"
+
+    # === HTML ===
+    html_parts = [
+        f"<body style='font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f5f5f0;margin:0;padding:20px;color:#2c2c2a'>",
+        f"<div style='max-width:640px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e0e0d8'>",
+        f"<div style='background:#1A7A6E;color:#fff;padding:18px 24px'>"
+        f"<div style='font-size:18px;font-weight:600'>Incendios NL — Reporte {fecha_iso}</div>"
+        f"<div style='font-size:13px;opacity:0.85;margin-top:3px'>Prediccion diaria de riesgo para los 51 municipios de Nuevo Leon</div>"
+        f"</div>",
+        f"<div style='padding:20px 24px'>",
+        f"<p style='margin:0 0 16px'>Hola {_html_escape(nombre_saludo)},</p>",
+        f"<h2 style='font-size:15px;font-weight:600;color:#1A7A6E;margin:16px 0 6px;border-bottom:1px solid #e0e0d8;padding-bottom:6px'>{_html_escape(titulo_primer_bloque)}</h2>",
+    ]
+
+    if munis_mostrar:
+        for p in munis_mostrar:
+            h, _ = _bloque_muni(p, ml_por_cve)
+            html_parts.append(h)
+    else:
+        html_parts.append("<p style='color:#666;font-size:13px'>Sin municipios con riesgo elevado en tu seleccion hoy.</p>")
+
+    # Panorama
+    html_parts.append(f"<h2 style='font-size:15px;font-weight:600;color:#1A7A6E;margin:24px 0 8px;border-bottom:1px solid #e0e0d8;padding-bottom:6px'>Panorama general del estado</h2>")
+    for nivel, emoji, color in [("EXTREMO","🔴","#D90429"),("MUY_ALTO","🟠","#E8600A"),("ALTO","🟡","#E5A100"),("MEDIO","🔵","#2B9348")]:
+        if niveles_counts[nivel]:
+            lista = ", ".join(_html_escape(x) for x in nombres_por_nivel[nivel])
+            html_parts.append(
+                f"<div style='margin:6px 0;font-size:13px'>"
+                f"<span style='color:{color};font-weight:600'>{emoji} {nivel.replace('_',' ')}</span> "
+                f"({niveles_counts[nivel]}): {lista}</div>"
+            )
+    if not any(niveles_counts[n] for n in ["EXTREMO","MUY_ALTO","ALTO","MEDIO"]):
+        html_parts.append("<p style='color:#1B4332;font-size:13px'>Todos los municipios del estado en nivel BAJO hoy.</p>")
+
+    html_parts.extend([
+        f"<p style='margin-top:20px;font-size:13px'>Ver dashboard completo: <a href='{DASHBOARD_URL}' style='color:#1A7A6E'>{DASHBOARD_URL}</a></p>",
+        f"</div>",
+        f"<div style='background:#fafaf5;padding:16px 24px;border-top:1px solid #e0e0d8;font-size:11px;color:#73726c;line-height:1.6'>",
+        f"Recibes este correo porque te suscribiste en <a href='{DASHBOARD_URL}' style='color:#1A7A6E'>{DASHBOARD_URL}</a>. ",
+        f"Puedes <a href='{DASHBOARD_URL}/preferencias.html' style='color:#1A7A6E'>cambiar tus preferencias</a> o ",
+        f"<a href='{DASHBOARD_URL}/desuscribir.html?token={sub['unsubscribe_token']}' style='color:#1A7A6E'>darte de baja</a> con un solo click.<br/>",
+        f"Sistema de Prediccion de Incendios — Vocacion Ambiental A.C.",
+        f"</div>",
+        f"</div></body>",
+    ])
+    html = "".join(html_parts)
+
+    # === Text ===
+    text_parts = [
+        f"INCENDIOS NL — Reporte {fecha_iso}",
+        "=" * 50,
+        f"Hola {nombre_saludo},",
+        "",
+        titulo_primer_bloque.upper(),
+        "-" * 50,
+    ]
+    if munis_mostrar:
+        for p in munis_mostrar:
+            _, t = _bloque_muni(p, ml_por_cve)
+            text_parts.append(t)
+    else:
+        text_parts.append("Sin municipios con riesgo elevado en tu seleccion hoy.\n")
+
+    text_parts += [
+        "",
+        "PANORAMA GENERAL DEL ESTADO",
+        "-" * 50,
+    ]
+    for nivel in ["EXTREMO", "MUY_ALTO", "ALTO", "MEDIO"]:
+        if niveles_counts[nivel]:
+            text_parts.append(f"  {nivel.replace('_',' ')} ({niveles_counts[nivel]}): {', '.join(nombres_por_nivel[nivel])}")
+    text_parts += [
+        "",
+        f"Dashboard: {DASHBOARD_URL}",
+        "",
+        f"Baja: {DASHBOARD_URL}/desuscribir.html?token={sub['unsubscribe_token']}",
+    ]
+    text = "\n".join(text_parts)
+
+    return subject, html, text, len(munis_mostrar), alertas_personales
+
+
+def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list, predicciones_ml: list, fecha_iso: str) -> None:
+    """Consulta suscriptores activos y envia correo personalizado via Mailjet."""
+    if not all([MAILJET_API_KEY, MAILJET_API_SECRET, MAILJET_FROM_EMAIL]):
+        log.info("Mailjet no configurado; se omite envio a suscriptores")
+        return
+
+    try:
+        subs = sb.select("v_suscriptores_activos", {"select": "*"})
+    except Exception as e:
+        log.error(f"Error consultando suscriptores: {e}")
+        return
+
+    if not subs:
+        log.info("Sin suscriptores activos")
+        return
+
+    log.info(f"Procesando {len(subs)} suscriptores...")
+    enviados = 0
+    omitidos = 0
+    fallidos = 0
+
+    for sub in subs:
+        try:
+            subject, html, text, n_munis, n_alertas = generar_email_suscriptor(
+                sub, predicciones, predicciones_ml, fecha_iso
+            )
+
+            # Si cadencia es solo_alertas y no hay alertas personales relevantes, omitir
+            if sub.get("cadencia") == "solo_alertas" and n_alertas == 0:
+                omitidos += 1
+                continue
+
+            ok, err = enviar_email_mailjet(sub["email"], subject, html, text)
+            status = "sent" if ok else "failed"
+            if ok:
+                enviados += 1
+            else:
+                fallidos += 1
+                log.error(f"  Fallo envio a {sub['email']}: {err}")
+
+            # Log en BD
+            try:
+                sb.insert("correos_enviados", [{
+                    "suscriptor_id": sub["id"],
+                    "email": sub["email"],
+                    "fecha": fecha_iso,
+                    "asunto": subject[:200],
+                    "n_municipios": n_munis,
+                    "n_alertas": n_alertas,
+                    "status": status,
+                    "error_msg": err[:500] if err else None,
+                }])
+            except Exception:
+                pass
+        except Exception as e:
+            log.error(f"  Error procesando suscriptor {sub.get('email','?')}: {e}")
+            fallidos += 1
+
+    log.info(f"Suscriptores: {enviados} enviados, {omitidos} omitidos (solo_alertas sin alertas), {fallidos} fallidos")
+
+
 # ─── Orquestador principal ──────────────────────────────────────────────────
 def main():
     log.info("=" * 60)
@@ -1226,6 +1517,12 @@ def main():
                     pass
     else:
         log.info("Sin municipios en nivel de alerta")
+
+    # Paso 8: Envio personalizado a suscriptores publicos via Mailjet
+    try:
+        enviar_resumen_suscriptores(sb, predicciones, predicciones_ml, date.today().isoformat())
+    except Exception as e:
+        log.error(f"Error enviando a suscriptores: {e}")
 
     log.info("✅ ETL completado")
 

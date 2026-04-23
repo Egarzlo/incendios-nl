@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro — Alertas Incendios NL</title>
+    <style>
+        :root {
+            --teal: #1A7A6E; --teal-light: #E1F5EE;
+            --bg: #f5f5f0; --card: #ffffff; --border: #e0e0d8;
+            --text: #2c2c2a; --text-secondary: #73726c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display:flex; flex-direction:column; }
+
+        .header {
+            background: var(--teal); color: white;
+            padding: 1.25rem 2rem;
+            display: flex; align-items: center; gap: 1rem;
+        }
+        .header a { color: white; text-decoration: none; }
+        .header h1 { font-size: 1.2rem; font-weight: 500; }
+
+        main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+
+        .card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 2rem;
+            max-width: 520px; width: 100%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .card h2 { font-size: 1.4rem; font-weight: 500; margin-bottom: 0.5rem; }
+        .card p.lead { color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5; }
+        .card ul { margin: 0.5rem 0 1.5rem 1.25rem; color: var(--text-secondary); font-size: 0.9rem; }
+        .card li { margin-bottom: 0.35rem; line-height: 1.4; }
+
+        label { display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.3rem; font-weight: 500; }
+        input[type=email] {
+            width: 100%; padding: 0.75rem 0.9rem;
+            border: 1px solid var(--border); border-radius: 8px;
+            font-size: 0.95rem; font-family: inherit;
+        }
+        input[type=email]:focus { outline: 2px solid var(--teal); border-color: var(--teal); }
+
+        button.primary {
+            margin-top: 1rem;
+            width: 100%; padding: 0.85rem;
+            background: var(--teal); color: white;
+            border: none; border-radius: 8px;
+            font-size: 0.95rem; font-weight: 500; font-family: inherit;
+            cursor: pointer;
+        }
+        button.primary:hover { background: #145a52; }
+        button.primary:disabled { background: #999; cursor: not-allowed; }
+
+        .footer-link { text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-secondary); }
+        .footer-link a { color: var(--teal); }
+
+        .alert {
+            margin-top: 1rem;
+            padding: 0.75rem 1rem; border-radius: 8px;
+            font-size: 0.88rem; line-height: 1.4;
+            display: none;
+        }
+        .alert.ok   { background: #D8F3DC; color: #1B4332; display: block; }
+        .alert.err  { background: #FFD6DE; color: #6B0218; display: block; }
+
+        .app-footer {
+            text-align: center; padding: 1rem;
+            color: var(--text-secondary); font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="/">←</a>
+        <h1>Alertas diarias de incendios — Nuevo León</h1>
+    </div>
+
+    <main>
+        <div class="card">
+            <h2>Suscribete a las alertas</h2>
+            <p class="lead">
+                Recibe por correo el estado de riesgo de incendio de los municipios que te interesan, segun los modelos climatico y de aprendizaje automatico del sistema.
+            </p>
+            <ul>
+                <li>Sin contraseña: te enviamos un enlace unico por correo.</li>
+                <li>Eliges los municipios, la frecuencia y el nivel minimo de alerta.</li>
+                <li>Puedes darte de baja con un click cualquier dia.</li>
+            </ul>
+
+            <form id="form-registro">
+                <label for="email">Correo electronico</label>
+                <input type="email" id="email" required placeholder="tucorreo@ejemplo.com" autocomplete="email"/>
+                <button type="submit" class="primary" id="btn-submit">Enviar enlace de acceso</button>
+            </form>
+
+            <div id="alert-ok"  class="alert ok">
+                <strong>Revisa tu correo.</strong> Te enviamos un enlace para confirmar tu registro y configurar tus preferencias. El enlace expira en 1 hora.
+            </div>
+            <div id="alert-err" class="alert err"></div>
+
+            <div class="footer-link">
+                ¿Ya eres suscriptor? Usa el mismo formulario — el enlace te lleva a tus preferencias existentes.
+            </div>
+        </div>
+    </main>
+
+    <div class="app-footer">
+        Sistema de Prediccion de Incendios — Vocacion Ambiental A.C.
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL      = 'https://rgskntzjsrqbeszeyvwo.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnc2tudHpqc3JxYmVzemV5dndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTAyMzEsImV4cCI6MjA4OTk2NjIzMX0.Bow5fil8hnR2T4mZBHabHKMzzCtI_rejNiCMGCFo4Bg';
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const form = document.getElementById('form-registro');
+        const btn  = document.getElementById('btn-submit');
+        const ok   = document.getElementById('alert-ok');
+        const err  = document.getElementById('alert-err');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            ok.style.display = 'none'; err.style.display = 'none';
+            const email = document.getElementById('email').value.trim().toLowerCase();
+            if (!email) return;
+
+            btn.disabled = true; btn.textContent = 'Enviando...';
+
+            try {
+                const redirectTo = `${window.location.origin}/preferencias.html`;
+                const { error } = await sb.auth.signInWithOtp({
+                    email,
+                    options: { emailRedirectTo: redirectTo },
+                });
+                if (error) throw error;
+                ok.style.display = 'block';
+                form.style.display = 'none';
+            } catch (e) {
+                console.error(e);
+                err.textContent = `No pudimos enviar el enlace: ${e.message || 'error desconocido'}. Intenta de nuevo o revisa la direccion.`;
+                err.style.display = 'block';
+                btn.disabled = false; btn.textContent = 'Enviar enlace de acceso';
+            }
+        });
+    </script>
+</body>
+</html>
