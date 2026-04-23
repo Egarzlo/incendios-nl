@@ -1107,7 +1107,10 @@ def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list, predic
         return
 
     try:
-        subs = sb.select("v_suscriptores_activos", {"select": "*"})
+        subs = sb.select("suscriptores", {
+            "select": "id,email,nombre,municipios_cve,cadencia,nivel_minimo,unsubscribe_token",
+            "activo": "eq.true",
+        })
     except Exception as e:
         log.error(f"Error consultando suscriptores: {e}")
         return
