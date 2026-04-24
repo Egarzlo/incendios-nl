@@ -1149,8 +1149,19 @@ def _bloque_muni(p: dict, predicciones_ml_por_cve: dict, fecha: date) -> tuple[s
     return html, text
 
 
+def cargar_recomendaciones_nivel(sb: "SupabaseClient") -> dict:
+    """Carga {nivel: recomendacion_text} desde BD. Retorna dict vacio si falla."""
+    try:
+        rows = sb.select("recomendaciones_nivel", {"select": "nivel,recomendacion"})
+        return {r["nivel"]: r["recomendacion"] for r in rows}
+    except Exception as e:
+        log.warning(f"No se pudieron cargar recomendaciones_nivel: {e}")
+        return {}
+
+
 def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_ml: list,
-                             fecha_iso: str, incluir_mapa: bool = True) -> tuple[str, str, str, int, int]:
+                             fecha_iso: str, incluir_mapa: bool = True,
+                             recomendaciones: dict = None) -> tuple[str, str, str, int, int]:
     """
     Arma (asunto, html, text, n_munis_reportados, n_alertas) para un suscriptor.
     Primera parte: sus municipios seleccionados con detalle.
@@ -1231,20 +1242,36 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
             f"Niveles del modelo de reglas (condiciones climaticas + factor humano) para hoy."
             f"</div></div>"
         )
-    # Dots de color CSS que matchean exactamente los colores del mapa PNG
-    for nivel in ["EXTREMO", "MUY_ALTO", "ALTO", "MEDIO"]:
-        if niveles_counts[nivel]:
-            color = NIVEL_COLOR_HEX.get(nivel, "#999")
+    # Dots de color CSS que matchean exactamente los colores del mapa PNG.
+    # Para BAJO no listamos los munis (serian 30+), solo el conteo.
+    recomendaciones = recomendaciones or {}
+    for nivel in ["EXTREMO", "MUY_ALTO", "ALTO", "MEDIO", "BAJO"]:
+        if not niveles_counts[nivel]:
+            continue
+        color = NIVEL_COLOR_HEX.get(nivel, "#999")
+        dot = (f"<span style='display:inline-block;width:11px;height:11px;background:{color};"
+               f"border-radius:50%;vertical-align:middle;margin-right:6px'></span>")
+        # BAJO: solo conteo, sin lista
+        if nivel == "BAJO":
+            plural = "municipio" if niveles_counts[nivel] == 1 else "municipios"
+            cuerpo_lista = f"<strong>{niveles_counts[nivel]} {plural}</strong>"
+        else:
             lista = ", ".join(_html_escape(x) for x in nombres_por_nivel[nivel])
-            dot = (f"<span style='display:inline-block;width:11px;height:11px;background:{color};"
-                   f"border-radius:50%;vertical-align:middle;margin-right:6px'></span>")
+            cuerpo_lista = f"({niveles_counts[nivel]}): {lista}"
+        html_parts.append(
+            f"<div style='margin:10px 0 4px 0;font-size:13px'>"
+            f"{dot}<span style='color:{color};font-weight:600'>{nivel.replace('_',' ')}</span> "
+            f"{cuerpo_lista}</div>"
+        )
+        # Recomendacion operativa
+        reco = recomendaciones.get(nivel)
+        if reco:
             html_parts.append(
-                f"<div style='margin:6px 0;font-size:13px'>"
-                f"{dot}<span style='color:{color};font-weight:600'>{nivel.replace('_',' ')}</span> "
-                f"({niveles_counts[nivel]}): {lista}</div>"
+                f"<div style='margin:0 0 10px 21px;font-size:12px;color:#5a5a5a;"
+                f"line-height:1.5;font-style:italic;border-left:2px solid {color};"
+                f"padding:4px 0 4px 10px'>"
+                f"{_html_escape(reco)}</div>"
             )
-    if not any(niveles_counts[n] for n in ["EXTREMO","MUY_ALTO","ALTO","MEDIO"]):
-        html_parts.append("<p style='color:#1B4332;font-size:13px'>Todos los municipios del estado en nivel BAJO hoy.</p>")
 
     html_parts.extend([
         f"<p style='margin-top:20px;font-size:13px'>Ver dashboard completo: <a href='{DASHBOARD_URL}' style='color:#1A7A6E'>{DASHBOARD_URL}</a></p>",
@@ -1280,9 +1307,21 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
         "PANORAMA GENERAL DEL ESTADO",
         "-" * 50,
     ]
-    for nivel in ["EXTREMO", "MUY_ALTO", "ALTO", "MEDIO"]:
-        if niveles_counts[nivel]:
+    for nivel in ["EXTREMO", "MUY_ALTO", "ALTO", "MEDIO", "BAJO"]:
+        if not niveles_counts[nivel]:
+            continue
+        if nivel == "BAJO":
+            plural = "municipio" if niveles_counts[nivel] == 1 else "municipios"
+            text_parts.append(f"  {nivel} ({niveles_counts[nivel]} {plural})")
+        else:
             text_parts.append(f"  {nivel.replace('_',' ')} ({niveles_counts[nivel]}): {', '.join(nombres_por_nivel[nivel])}")
+        reco = recomendaciones.get(nivel)
+        if reco:
+            # Wrap a 72 chars con indentacion
+            import textwrap as _tw
+            for line in _tw.wrap(reco, width=72, initial_indent="    ", subsequent_indent="    "):
+                text_parts.append(line)
+            text_parts.append("")
     text_parts += [
         "",
         f"Dashboard: {DASHBOARD_URL}",
@@ -1315,6 +1354,11 @@ def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list,
         log.info("Sin suscriptores activos")
         return
 
+    # Cargar recomendaciones operativas por nivel (editables desde BD)
+    recomendaciones = cargar_recomendaciones_nivel(sb)
+    if recomendaciones:
+        log.info(f"Recomendaciones cargadas para {len(recomendaciones)} niveles")
+
     # Generar mapa una vez (se reutiliza en todos los correos)
     mapa_png = None
     if municipios_geom:
@@ -1335,7 +1379,8 @@ def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list,
         try:
             subject, html, text, n_munis, n_alertas = generar_email_suscriptor(
                 sub, predicciones, predicciones_ml, fecha_iso,
-                incluir_mapa=(mapa_png is not None)
+                incluir_mapa=(mapa_png is not None),
+                recomendaciones=recomendaciones,
             )
 
             # Si cadencia es solo_alertas y no hay alertas personales relevantes, omitir
