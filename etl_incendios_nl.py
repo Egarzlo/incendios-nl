@@ -11,7 +11,7 @@ import os
 import json
 import time
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -1161,7 +1161,8 @@ def cargar_recomendaciones_nivel(sb: "SupabaseClient") -> dict:
 
 def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_ml: list,
                              fecha_iso: str, incluir_mapa: bool = True,
-                             recomendaciones: dict = None) -> tuple[str, str, str, int, int]:
+                             recomendaciones: dict = None,
+                             pronostico_at: datetime = None) -> tuple[str, str, str, int, int]:
     """
     Arma (asunto, html, text, n_munis_reportados, n_alertas) para un suscriptor.
     Primera parte: sus municipios seleccionados con detalle.
@@ -1273,8 +1274,21 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
                 f"{_html_escape(reco)}</div>"
             )
 
+    # Timestamp de la consulta al pronostico (hora local Monterrey)
+    if pronostico_at is None:
+        pronostico_at = datetime.now(timezone.utc)
+    try:
+        # Hora local Monterrey (-06:00 CST)
+        hora_local_str = (pronostico_at - timedelta(hours=6)).strftime("%d/%m/%Y %H:%M") + " (hora local Nuevo Leon)"
+    except Exception:
+        hora_local_str = pronostico_at.strftime("%d/%m/%Y %H:%M UTC")
+
     html_parts.extend([
         f"<p style='margin-top:20px;font-size:13px'>Ver dashboard completo: <a href='{DASHBOARD_URL}' style='color:#1A7A6E'>{DASHBOARD_URL}</a></p>",
+        f"<p style='margin-top:12px;font-size:11px;color:#73726c;font-style:italic;border-top:1px dashed #e0e0d8;padding-top:10px'>"
+        f"Datos basados en el pronostico Open-Meteo consultado el {_html_escape(hora_local_str)}. "
+        f"Los valores pueden actualizarse conforme se publican nuevas corridas del modelo meteorologico durante el dia."
+        f"</p>",
         f"</div>",
         f"<div style='background:#fafaf5;padding:16px 24px;border-top:1px solid #e0e0d8;font-size:11px;color:#73726c;line-height:1.6'>",
         f"Recibes este correo porque te suscribiste en <a href='{DASHBOARD_URL}' style='color:#1A7A6E'>{DASHBOARD_URL}</a>. ",
@@ -1326,6 +1340,9 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
         "",
         f"Dashboard: {DASHBOARD_URL}",
         "",
+        f"-- Datos basados en el pronostico Open-Meteo consultado el {hora_local_str}.",
+        f"   Los valores pueden actualizarse durante el dia.",
+        "",
         f"Baja: {DASHBOARD_URL}/desuscribir.html?token={sub['unsubscribe_token']}",
     ]
     text = "\n".join(text_parts)
@@ -1335,7 +1352,8 @@ def generar_email_suscriptor(sub: dict, predicciones_reglas: list, predicciones_
 
 def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list,
                                 predicciones_ml: list, fecha_iso: str,
-                                municipios_geom: list) -> None:
+                                municipios_geom: list,
+                                pronostico_at: datetime = None) -> None:
     """Consulta suscriptores activos y envia correo personalizado via Mailjet."""
     if not all([MAILJET_API_KEY, MAILJET_API_SECRET, MAILJET_FROM_EMAIL]):
         log.info("Mailjet no configurado; se omite envio a suscriptores")
@@ -1381,6 +1399,7 @@ def enviar_resumen_suscriptores(sb: "SupabaseClient", predicciones: list,
                 sub, predicciones, predicciones_ml, fecha_iso,
                 incluir_mapa=(mapa_png is not None),
                 recomendaciones=recomendaciones,
+                pronostico_at=pronostico_at,
             )
 
             # Si cadencia es solo_alertas y no hay alertas personales relevantes, omitir
@@ -1447,6 +1466,7 @@ def main():
     hotspots_raw = fetch_firms_hotspots(day_range=2)
 
     # Paso 2
+    pronostico_at_utc = datetime.now(timezone.utc)
     meteo_data = fetch_open_meteo(municipios_db, days_back=7)
 
     # Paso 3: Geocodificación estricta con shapefile INEGI oficial
@@ -1778,7 +1798,8 @@ def main():
     # Paso 8: Envio personalizado a suscriptores publicos via Mailjet
     try:
         enviar_resumen_suscriptores(sb, predicciones, predicciones_ml,
-                                    date.today().isoformat(), municipios_geom)
+                                    date.today().isoformat(), municipios_geom,
+                                    pronostico_at=pronostico_at_utc)
     except Exception as e:
         log.error(f"Error enviando a suscriptores: {e}")
 
