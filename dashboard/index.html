@@ -350,6 +350,87 @@
             background:#FFF8E1; border-left:3px solid #E5A100;
             padding:1rem 1.25rem; border-radius:0 8px 8px 0; margin:1rem 0; font-size:0.85rem;
         }
+        .metodologia .warn-box {
+            background:#FFE0CC; border-left:3px solid #E8600A;
+            padding:1rem 1.25rem; border-radius:0 8px 8px 0; margin:1rem 0; font-size:0.85rem;
+        }
+        .metodologia .info-box {
+            background:#F0F0F0; border-left:3px solid #777;
+            padding:0.75rem 1rem; border-radius:0 6px 6px 0; margin:0.75rem 0; font-size:0.85rem;
+        }
+        .metodologia .resumen-ejecutivo {
+            background:linear-gradient(180deg, var(--teal-light) 0%, #fff 100%);
+            border:1px solid var(--teal); border-radius:10px;
+            padding:1.5rem; margin:0 0 2rem 0; font-size:0.95rem; line-height:1.7;
+        }
+        .metodologia .toc {
+            background:var(--card); border:1px solid var(--border); border-radius:8px;
+            padding:0.85rem 1.25rem; margin:0 0 1.5rem 0;
+        }
+        .metodologia .toc-titulo { font-size:0.78rem; color:var(--text-secondary); font-weight:500; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.5rem; }
+        .metodologia .toc ol { margin:0; padding-left:1.25rem; columns:2; column-gap:1.5rem; font-size:0.85rem; }
+        .metodologia .toc li { margin:0.2rem 0; break-inside:avoid; }
+        .metodologia .toc a { color:var(--teal); text-decoration:none; }
+        .metodologia .toc a:hover { text-decoration:underline; }
+        @media (max-width:600px) { .metodologia .toc ol { columns:1; } }
+
+        .metodologia .diagrama-flujo {
+            display:block; max-width:100%; height:auto;
+            margin:1rem auto; border:1px solid var(--border); border-radius:10px;
+            background:#fdfdfa;
+        }
+
+        .metodologia ol.pipeline { padding-left:1.25rem; font-size:0.9rem; line-height:1.65; }
+        .metodologia ol.pipeline li { margin-bottom:0.5rem; }
+        .metodologia ol.pipeline strong { color:var(--teal); }
+
+        .metodologia .ejemplo-box {
+            border:1px solid var(--border); border-radius:10px;
+            background:#fafaf5; padding:1.25rem; margin:1rem 0; font-size:0.86rem;
+        }
+        .metodologia .ejemplo-box h4 {
+            font-size:0.85rem; font-weight:500; color:var(--teal);
+            margin:0 0 0.5rem 0; text-transform:uppercase; letter-spacing:0.05em;
+        }
+        .metodologia .ejemplo-step {
+            display:grid; grid-template-columns:1fr 2fr; gap:0.5rem 1rem;
+            padding:0.4rem 0; border-bottom:1px dotted #e0e0d8; align-items:baseline;
+        }
+        .metodologia .ejemplo-step:last-child { border-bottom:none; }
+        .metodologia .ejemplo-step .key { color:var(--text-secondary); font-family:monospace; font-size:0.8rem; }
+        .metodologia .ejemplo-step .val { color:var(--text); }
+        .metodologia .ejemplo-formula {
+            background:#fff; border:1px solid var(--border); border-radius:6px;
+            padding:0.6rem 0.85rem; font-family:monospace; font-size:0.82rem;
+            margin:0.5rem 0; line-height:1.6; color:#444; white-space:pre-wrap;
+        }
+
+        /* Bar chart de feature importance (puro CSS) */
+        .feat-imp { margin:0.75rem 0; }
+        .feat-row {
+            display:grid; grid-template-columns:160px 1fr 50px;
+            gap:0.6rem; align-items:center;
+            font-size:0.8rem; padding:3px 0;
+        }
+        .feat-row .name { color:var(--text); font-family:monospace; font-size:0.78rem; }
+        .feat-row .bar-wrap { background:#f0f0e8; border-radius:4px; height:14px; overflow:hidden; }
+        .feat-row .bar { background:var(--teal); height:100%; border-radius:4px; }
+        .feat-row .pct { color:var(--text-secondary); font-size:0.75rem; text-align:right; font-variant-numeric:tabular-nums; }
+
+        /* Heatmap factor antropogenico */
+        .heat-tabla { width:100%; border-collapse:collapse; margin:0.75rem 0; font-size:0.8rem; }
+        .heat-tabla th, .heat-tabla td { padding:0.5rem 0.6rem; text-align:center; border:1px solid var(--border); }
+        .heat-tabla th { background:#fafaf5; font-weight:500; }
+        .heat-tabla td.evento { text-align:left; background:#fafaf5; font-weight:500; min-width:160px; }
+        .heat-cell-1  { background:#F4FAF7; }
+        .heat-cell-2  { background:#D8F3DC; }
+        .heat-cell-3  { background:#B7E4C7; }
+        .heat-cell-4  { background:#FFE0CC; color:#7A3300; font-weight:500; }
+        .heat-cell-5  { background:#FFD6DE; color:#6B0218; font-weight:500; }
+        .heat-cell-6  { background:#D90429; color:#fff; font-weight:600; }
+
+        .glosario dt { font-weight:500; color:var(--teal); margin-top:0.6rem; font-size:0.88rem; }
+        .glosario dd { margin:0.15rem 0 0.5rem 0.75rem; font-size:0.85rem; color:#444; line-height:1.5; }
 
         .footer {
             text-align:center; padding:2rem 1rem; color:var(--text-secondary);
@@ -477,30 +558,163 @@
         </div>
 
         <div class="section metodologia" id="sec-metodologia">
-            <h2>Fundamento del modelo</h2>
-            <p>La ocurrencia y propagacion de un incendio forestal depende de la convergencia simultanea de tres factores conocidos como el <em>triangulo del fuego</em>: combustible disponible, condiciones atmosfericas favorables y una fuente de ignicion. El sistema traduce cada uno en variables cuantificables que se obtienen diariamente de fuentes satelitales y meteorologicas, y las procesa en dos modelos complementarios (reglas fisicas y Random Forest entrenado con historico CONAFOR), a los que se aplica opcionalmente un factor antropogenico derivado de la ecorregion Vocacion Ambiental A.C. y la actividad humana caracteristica del municipio.</p>
-            <div class="highlight-box">
-                El ETL se ejecuta diariamente a las 6:00 AM CST (GitHub Actions) para cada uno de los <strong>51 municipios de Nuevo Leon</strong>. Los resultados se almacenan en Supabase y son consumidos por este dashboard. Todas las etapas son idempotentes y auditables.
+            <div class="toc">
+                <div class="toc-titulo">Contenido</div>
+                <ol>
+                    <li><a href="#m-resumen">Resumen ejecutivo</a></li>
+                    <li><a href="#m-flujo">Flujo de datos</a></li>
+                    <li><a href="#m-pipeline">Pipeline ETL paso a paso</a></li>
+                    <li><a href="#m-fuentes">Fuentes oficiales</a></li>
+                    <li><a href="#m-features">Features por municipio</a></li>
+                    <li><a href="#m-reglas">Modelo base de reglas</a></li>
+                    <li><a href="#m-ml">Modelo ML (Random Forest)</a></li>
+                    <li><a href="#m-factor">Factor antropogenico</a></li>
+                    <li><a href="#m-niveles">Niveles e interpretacion</a></li>
+                    <li><a href="#m-ejemplo">Caso completo: Galeana</a></li>
+                    <li><a href="#m-limitaciones">Limitaciones conocidas</a></li>
+                    <li><a href="#m-trazabilidad">Trazabilidad</a></li>
+                    <li><a href="#m-comparativa">Posicion vs sistemas oficiales</a></li>
+                    <li><a href="#m-glosario">Glosario</a></li>
+                </ol>
             </div>
 
-            <h2>1. Fuentes de datos en produccion</h2>
+            <h2 id="m-resumen">1. Resumen ejecutivo</h2>
+            <div class="resumen-ejecutivo">
+                <p>Este sistema procesa diariamente datos satelitales y meteorologicos para los <strong>51 municipios de Nuevo Leon</strong>, los combina con el historico oficial de incendios CONAFOR 2015–2024 y la regionalizacion ecologica de Vocacion Ambiental A.C., y produce: <strong>(a)</strong> un dashboard web con dos modelos de prediccion (reglas fisicas y Random Forest), <strong>(b)</strong> contexto historico que ranquea cada municipio por mes, y <strong>(c)</strong> correos personalizados con los municipios que cada usuario seleccionó al suscribirse, con recomendaciones operativas por nivel.</p>
+                <p style="margin:0">El ETL corre cada manana a las <strong>6:00 AM CST</strong> de manera automatizada en GitHub Actions y almacena toda prediccion en Supabase con trazabilidad completa de los datos de entrada y salida. Cada decision del sistema es auditable y reproducible.</p>
+            </div>
+
+            <h2 id="m-flujo">2. Flujo de datos</h2>
+            <p>Vista esquematica del recorrido que hace cada dato desde la fuente hasta el correo del usuario operativo. Las cajas en linea continua representan procesamiento activo en cada corrida; las punteadas son referencias estaticas que se cargan una vez al dia. Cada paso esta detallado en las siguientes secciones.</p>
+            <svg viewBox="0 0 720 820" xmlns="http://www.w3.org/2000/svg" class="diagrama-flujo">
+                <defs>
+                    <marker id="m-arrow" viewBox="0 0 10 10" markerWidth="9" markerHeight="9" refX="9" refY="5" orient="auto-start-reverse">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#1A7A6E"/>
+                    </marker>
+                    <marker id="m-arrow-light" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto-start-reverse">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#73726c"/>
+                    </marker>
+                    <style>
+                        .m-box { fill:#fff; stroke:#1A7A6E; stroke-width:1.5; }
+                        .m-box-static { fill:#fafaf5; stroke:#999; stroke-width:1.2; stroke-dasharray:4 3; }
+                        .m-box-out { fill:#E1F5EE; stroke:#1A7A6E; stroke-width:1.5; }
+                        .m-box-proc { fill:#fff; stroke:#1A7A6E; stroke-width:2.5; }
+                        .m-lbl { font-family: system-ui,sans-serif; font-size:12px; fill:#2c2c2a; }
+                        .m-lbl-bold { font-family: system-ui,sans-serif; font-size:13px; fill:#1A7A6E; font-weight:600; }
+                        .m-lbl-sub { font-family: system-ui,sans-serif; font-size:10.5px; fill:#73726c; }
+                        .m-arrow-line { stroke:#1A7A6E; stroke-width:1.8; fill:none; }
+                        .m-arrow-light { stroke:#73726c; stroke-width:1.2; fill:none; stroke-dasharray:4 3; }
+                    </style>
+                </defs>
+
+                <text class="m-lbl-sub" x="20" y="20">FUENTES EN VIVO (consultadas cada corrida)</text>
+                <rect class="m-box" x="20" y="30" width="220" height="62" rx="8"/>
+                <text class="m-lbl-bold" x="130" y="52" text-anchor="middle">NASA FIRMS</text>
+                <text class="m-lbl-sub" x="130" y="68" text-anchor="middle">Hotspots NRT 4 satelites</text>
+                <text class="m-lbl-sub" x="130" y="82" text-anchor="middle">VIIRS NOAA-20/21/SNPP + MODIS</text>
+
+                <rect class="m-box" x="260" y="30" width="220" height="62" rx="8"/>
+                <text class="m-lbl-bold" x="370" y="52" text-anchor="middle">Open-Meteo</text>
+                <text class="m-lbl-sub" x="370" y="68" text-anchor="middle">Pronostico ICON+GFS</text>
+                <text class="m-lbl-sub" x="370" y="82" text-anchor="middle">~11 km, actualiza 4×/dia</text>
+
+                <text class="m-lbl-sub" x="500" y="20">REFERENCIAS ESTATICAS</text>
+                <rect class="m-box-static" x="500" y="30" width="200" height="62" rx="8"/>
+                <text class="m-lbl" x="600" y="48" text-anchor="middle">INEGI 2025.1 · Vocacion Ambiental A.C.</text>
+                <text class="m-lbl-sub" x="600" y="63" text-anchor="middle">Poligonos municipales</text>
+                <text class="m-lbl-sub" x="600" y="76" text-anchor="middle">Ecorregiones · Actividades</text>
+                <text class="m-lbl-sub" x="600" y="89" text-anchor="middle">Historico CONAFOR 2015–24</text>
+
+                <path class="m-arrow-line" d="M 130 92 Q 130 130 280 165" marker-end="url(#m-arrow)"/>
+                <path class="m-arrow-line" d="M 370 92 Q 370 130 360 165" marker-end="url(#m-arrow)"/>
+                <path class="m-arrow-light" d="M 600 92 Q 600 130 440 165" marker-end="url(#m-arrow-light)"/>
+
+                <rect class="m-box-proc" x="80" y="170" width="560" height="60" rx="8"/>
+                <text class="m-lbl-bold" x="360" y="194" text-anchor="middle">ETL diario · GitHub Actions · 6:00 AM CST · 1–3 min</text>
+                <text class="m-lbl-sub" x="360" y="214" text-anchor="middle">Geocodificacion point-in-polygon · Calculo de features · Inferencia paralela · Persistencia idempotente</text>
+
+                <path class="m-arrow-line" d="M 360 230 L 360 273" marker-end="url(#m-arrow)"/>
+
+                <rect class="m-box" x="160" y="278" width="400" height="55" rx="8"/>
+                <text class="m-lbl-bold" x="360" y="300" text-anchor="middle">Features por (municipio, fecha)</text>
+                <text class="m-lbl-sub" x="360" y="320" text-anchor="middle">14 variables: clima · sequia · hotspots · geografia · estacionalidad</text>
+
+                <path class="m-arrow-line" d="M 270 333 L 200 380" marker-end="url(#m-arrow)"/>
+                <path class="m-arrow-line" d="M 450 333 L 520 380" marker-end="url(#m-arrow)"/>
+
+                <rect class="m-box" x="80" y="385" width="220" height="62" rx="8"/>
+                <text class="m-lbl-bold" x="190" y="408" text-anchor="middle">Modelo de reglas</text>
+                <text class="m-lbl-sub" x="190" y="425" text-anchor="middle">Triangulo del fuego ponderado</text>
+                <text class="m-lbl-sub" x="190" y="440" text-anchor="middle">Score 0–100 → prob_base</text>
+
+                <rect class="m-box" x="420" y="385" width="220" height="62" rx="8"/>
+                <text class="m-lbl-bold" x="530" y="408" text-anchor="middle">Random Forest ml_v2</text>
+                <text class="m-lbl-sub" x="530" y="425" text-anchor="middle">300 arboles · ROC-AUC 0.90</text>
+                <text class="m-lbl-sub" x="530" y="440" text-anchor="middle">ERA5 + CONAFOR 2015–24</text>
+
+                <path class="m-arrow-line" d="M 190 447 Q 190 480 320 510" marker-end="url(#m-arrow)"/>
+                <path class="m-arrow-line" d="M 530 447 Q 530 480 400 510" marker-end="url(#m-arrow)"/>
+
+                <rect class="m-box" x="160" y="515" width="400" height="62" rx="8"/>
+                <text class="m-lbl-bold" x="360" y="538" text-anchor="middle">Factor antropogenico (cap 20 pts)</text>
+                <text class="m-lbl-sub" x="360" y="555" text-anchor="middle">Calendario × Ecorregion × Actividad</text>
+                <text class="m-lbl-sub" x="360" y="570" text-anchor="middle">prob_ajustada = min(prob_base + pts/100, 1.0)</text>
+
+                <path class="m-arrow-line" d="M 360 577 L 360 620" marker-end="url(#m-arrow)"/>
+
+                <rect class="m-box-proc" x="160" y="625" width="400" height="55" rx="8"/>
+                <text class="m-lbl-bold" x="360" y="648" text-anchor="middle">Supabase Postgres · trazable</text>
+                <text class="m-lbl-sub" x="360" y="667" text-anchor="middle">predicciones · clima_diario · hotspots · suscriptores</text>
+
+                <path class="m-arrow-line" d="M 270 680 L 200 730" marker-end="url(#m-arrow)"/>
+                <path class="m-arrow-line" d="M 450 680 L 520 730" marker-end="url(#m-arrow)"/>
+
+                <rect class="m-box-out" x="80" y="735" width="220" height="62" rx="8"/>
+                <text class="m-lbl-bold" x="190" y="758" text-anchor="middle">Dashboard web</text>
+                <text class="m-lbl-sub" x="190" y="775" text-anchor="middle">incendios-nl.netlify.app</text>
+                <text class="m-lbl-sub" x="190" y="790" text-anchor="middle">Mapas + cards + toggle factor</text>
+
+                <rect class="m-box-out" x="420" y="735" width="220" height="62" rx="8"/>
+                <text class="m-lbl-bold" x="530" y="758" text-anchor="middle">Correos personalizados</text>
+                <text class="m-lbl-sub" x="530" y="775" text-anchor="middle">Mailjet · suscriptores</text>
+                <text class="m-lbl-sub" x="530" y="790" text-anchor="middle">Mapa PNG + recomendaciones</text>
+            </svg>
+
+            <h2 id="m-pipeline">3. Pipeline ETL paso a paso</h2>
+            <p>El ETL se ejecuta como una secuencia ordenada de 9 pasos. Tiempo total tipico: 1–3 minutos por corrida. Cada paso registra cuantos registros proceso y cuantos se omitieron.</p>
+            <ol class="pipeline">
+                <li><strong>Carga del catalogo de municipios</strong> — lectura de Supabase: 51 filas con cve_muni, centroide INEGI, elevacion, ecorregion y actividades.</li>
+                <li><strong>Fetch FIRMS</strong> — 4 satelites consultados secuencialmente (NOAA-20, NOAA-21, Suomi NPP, MODIS Terra/Aqua). Ventana de 48 h sobre el bbox de Nuevo Leon. Tipico: 5–30 hotspots/dia.</li>
+                <li><strong>Fetch Open-Meteo</strong> — clima diario para los 51 centroides; ventana de 7 dias hacia atras (necesaria para dias_sin_lluvia y dias_sin_lluvia_30d). 3–4 batches HTTP de ~15 municipios c/u con pausa entre lotes.</li>
+                <li><strong>Geocodificacion estricta</strong> — point-in-polygon de cada hotspot contra los poligonos INEGI 2025.1 usando shapely.STRtree. Hotspots fuera del estado se descartan; no hay fallback al centroide mas cercano.</li>
+                <li><strong>Calculo de features derivados</strong> — racha de dias sin lluvia, ventana 30 dias, n_hotspots_24h (filtrado a 24 h reales), frp_max.</li>
+                <li><strong>Inferencia paralela</strong> — modelo de reglas y Random Forest evaluados sobre los mismos features. Cada uno produce <code>prob_base</code> independiente.</li>
+                <li><strong>Factor antropogenico</strong> — calendario × ecorregion × actividad. Suma con cap de 20 pts. Se aplica como <code>prob = min(prob_base + pts/100, 1.0)</code> a ambos modelos.</li>
+                <li><strong>Persistencia</strong> — upsert idempotente a Supabase con <code>UNIQUE(municipio_id, fecha, modelo_version)</code>. Permite re-correr el ETL sin generar duplicados.</li>
+                <li><strong>Distribucion</strong> — correos via Mailjet a suscriptores publicos (mapa PNG embebido + recomendaciones por nivel + contexto historico) y alertas operativas a contactos institucionales.</li>
+            </ol>
+            <div class="info-box">
+                El log completo de cada corrida se sube como artifact a GitHub Actions con retencion de 30 dias. Si un paso falla, los siguientes intentan continuar con datos parciales y registran el incidente.
+            </div>
+
+            <h2 id="m-fuentes">4. Fuentes oficiales</h2>
             <table>
                 <thead><tr><th>Fuente</th><th>Dato</th><th>Resolucion</th><th>Frecuencia</th></tr></thead>
                 <tbody>
-                    <tr><td>NASA FIRMS — VIIRS NOAA-20</td><td>Hotspots termicos (NRT)</td><td>375 m</td><td>~12 pasadas/dia</td></tr>
-                    <tr><td>NASA FIRMS — VIIRS NOAA-21 (JPSS-2)</td><td>Hotspots termicos (NRT)</td><td>375 m</td><td>~12 pasadas/dia</td></tr>
-                    <tr><td>NASA FIRMS — VIIRS Suomi NPP</td><td>Hotspots termicos (NRT)</td><td>375 m</td><td>~12 pasadas/dia</td></tr>
-                    <tr><td>NASA FIRMS — MODIS Terra/Aqua</td><td>Hotspots termicos (NRT)</td><td>1 km</td><td>~4 pasadas/dia</td></tr>
-                    <tr><td>Open-Meteo Forecast API</td><td>Temp max/min, humedad min, viento max, precipitacion, ET0</td><td>~11 km</td><td>Diaria</td></tr>
-                    <tr><td>INEGI Marco Geoestadistico 2025.1</td><td>Poligonos municipales oficiales (51 municipios)</td><td>1:50,000</td><td>Estatico</td></tr>
-                    <tr><td>Mapa ecorregiones Vocacion Ambiental A.C.</td><td>Clasificacion R1–R5 por municipio</td><td>Municipal</td><td>Estatico</td></tr>
-                    <tr><td>CONAFOR — Estadisticas incendios forestales</td><td>Historico de incendios (2015–2024)</td><td>Municipal, anual</td><td>Entrenamiento ML</td></tr>
+                    <tr><td>NASA FIRMS — VIIRS NOAA-20</td><td>Hotspots termicos NRT</td><td>375 m</td><td>~12 pasadas/dia</td></tr>
+                    <tr><td>NASA FIRMS — VIIRS NOAA-21 (JPSS-2)</td><td>Hotspots termicos NRT</td><td>375 m</td><td>~12 pasadas/dia</td></tr>
+                    <tr><td>NASA FIRMS — VIIRS Suomi NPP</td><td>Hotspots termicos NRT</td><td>375 m</td><td>~12 pasadas/dia</td></tr>
+                    <tr><td>NASA FIRMS — MODIS Terra/Aqua</td><td>Hotspots termicos NRT</td><td>1 km</td><td>~4 pasadas/dia</td></tr>
+                    <tr><td>Open-Meteo Forecast API</td><td>Temp max/min, humedad min, viento max, precipitacion, ET0</td><td>~11 km</td><td>Diaria, 4 corridas</td></tr>
+                    <tr><td>INEGI Marco Geoestadistico 2025.1</td><td>Poligonos municipales oficiales (51 municipios NL)</td><td>1:50,000</td><td>Estatico anual</td></tr>
+                    <tr><td>Vocacion Ambiental A.C.</td><td>Mapa de ecorregiones R1–R5</td><td>Estatal</td><td>Estatico</td></tr>
+                    <tr><td>CONAFOR — Estadisticas incendios</td><td>Historico de incendios 2015–2024</td><td>Municipal, anual</td><td>Entrenamiento ML + ranking historico</td></tr>
                 </tbody>
             </table>
-            <p>Los hotspots de las 4 fuentes FIRMS se ingestan con ventana de 48 h. Cada deteccion se geocodifica por <strong>point-in-polygon contra el shapefile INEGI</strong> (no por centroide mas cercano); los hotspots fuera del estado se descartan. Las detecciones se almacenan como filas independientes por satelite y cuentan con constraint UNIQUE <code>(lat, lon, detected_at, source)</code> que garantiza idempotencia.</p>
+            <p>Los hotspots de las 4 fuentes FIRMS se ingestan con ventana de 48 h. Cada deteccion se geocodifica por <strong>point-in-polygon contra el shapefile INEGI</strong>; los hotspots fuera del estado se descartan. Se almacenan como filas independientes por satelite con <code>UNIQUE(latitude, longitude, detected_at, source)</code> que garantiza idempotencia.</p>
 
-            <h2>2. Features meteorologicas por municipio</h2>
-            <p>Open-Meteo se consulta con el <strong>centroide geometrico oficial del poligono INEGI</strong> de cada municipio (no la cabecera municipal), lo que garantiza que el clima reflejado corresponde al area del municipio y no a un punto arbitrario. Para cada municipio y dia se calculan:</p>
+            <h2 id="m-features">5. Features por municipio</h2>
+            <p>Open-Meteo se consulta con el <strong>centroide geometrico oficial del poligono INEGI</strong> de cada municipio (no la cabecera municipal): para municipios grandes como Galeana, Doctor Arroyo o Aramberri la cabecera puede estar desplazada decenas de kilometros del centro geografico, alterando los datos climaticos consultados.</p>
             <table>
                 <thead><tr><th>Feature</th><th>Origen</th><th>Uso</th></tr></thead>
                 <tbody>
@@ -510,14 +724,17 @@
                     <tr><td>precipitacion (mm)</td><td>Open-Meteo daily</td><td>Reglas + ML</td></tr>
                     <tr><td>et0 (evapotranspiracion FAO)</td><td>Open-Meteo daily</td><td>ML</td></tr>
                     <tr><td>dias_sin_lluvia</td><td>Historico clima_diario (umbral 1 mm)</td><td>Reglas + ML</td></tr>
+                    <tr><td>dias_sin_lluvia_30d</td><td>Ventana 30 dias en clima_diario</td><td>ML</td></tr>
                     <tr><td>n_hotspots_24h, frp_max</td><td>Hotspots ultimas 24 h del municipio</td><td>Reglas + ML</td></tr>
-                    <tr><td>elevacion_media, pendiente_media</td><td>Estatico (catalogo municipios)</td><td>ML</td></tr>
+                    <tr><td>elevacion_media</td><td>Estatico (DEM Open-Meteo, ~1 km)</td><td>ML</td></tr>
+                    <tr><td>lat, lon</td><td>Centroide INEGI</td><td>ML</td></tr>
+                    <tr><td>ecoregion (1–5)</td><td>Catalogo Vocacion Ambiental A.C.</td><td>ML</td></tr>
                     <tr><td>mes, dia_del_año</td><td>Fecha del ETL</td><td>ML</td></tr>
                 </tbody>
             </table>
 
-            <h2>3. Modelo base — reglas fisicas</h2>
-            <p>Para explicar el POR QUE del riesgo, el sistema calcula un score ponderado a partir del triangulo del fuego. Produce <code>prob_base</code> (antes del factor antropogenico).</p>
+            <h2 id="m-reglas">6. Modelo base — reglas fisicas</h2>
+            <p>Para explicar el <em>por que</em> del riesgo, el sistema calcula un score ponderado a partir del triangulo del fuego. Produce <code>prob_base</code> (antes del factor antropogenico). Es transparente, auditable, y responde directamente a las variables fisicas.</p>
             <table>
                 <thead><tr><th>Factor</th><th>Peso max</th><th>Umbrales</th></tr></thead>
                 <tbody>
@@ -529,30 +746,65 @@
                 </tbody>
             </table>
             <p>Score total maximo = 100 pts. Se convierte a probabilidad dividiendo entre 100 y se acota a <code>[0, 1]</code>.</p>
+            <h3>Justificacion de los pesos</h3>
+            <p>La sequedad del combustible domina (35%) porque sin combustible seco el fuego no prospera, sin importar las demas condiciones. Temperatura y humedad reciben pesos similares (20% c/u) porque trabajan en conjunto: aire caliente y seco deshidrata vegetacion. El viento (15%) es propagador, no detonador. Los hotspots (10%) son confirmacion de fuego activo, no factor de riesgo en si mismo, por eso pesan menos que las condiciones predispositivas.</p>
 
-            <h2>4. Modelo ML — Random Forest</h2>
-            <p>Paralelamente se aplica un clasificador <strong>Random Forest</strong> entrenado con el historico CONAFOR 2015–2024 enriquecido con variables climaticas reanalizadas de esos años. El modelo predice probabilidad de ocurrencia de incendio a nivel (municipio, dia) a partir de los features listados en la seccion 2. Ambos modelos coexisten en la tabla <code>predicciones</code> con etiqueta <code>modelo_version = rules_v1</code> o <code>ml_v1</code> y se muestran en pestañas separadas.</p>
+            <h2 id="m-ml">7. Modelo ML — Random Forest</h2>
+            <p>Paralelamente al modelo de reglas se aplica un clasificador <strong>Random Forest</strong> entrenado con el historico CONAFOR 2015–2024 enriquecido con clima reanalisis ERA5 para cada (municipio, dia) de esos 10 años. El modelo aprende patrones no-lineales entre features y ocurrencia real de incendio. Ambos modelos coexisten en BD con etiqueta <code>modelo_version</code> y se muestran en pestañas separadas del dashboard.</p>
+            <h3>Metricas (test 2023–2024)</h3>
+            <table>
+                <thead><tr><th>Metrica</th><th>Valor</th><th>Interpretacion</th></tr></thead>
+                <tbody>
+                    <tr><td>ROC-AUC</td><td>0.90</td><td>Buena separabilidad general entre dia con/sin incendio</td></tr>
+                    <tr><td>PR-AUC</td><td>0.115</td><td>~9× la base aleatoria (1.3% positivos); honesto pero modesto</td></tr>
+                    <tr><td>Recall (threshold 0.84)</td><td>30%</td><td>Captura 30% de los incendios reales del set de prueba</td></tr>
+                    <tr><td>F1</td><td>0.21</td><td>Compromiso entre precision y recall</td></tr>
+                    <tr><td>Prob media en dia con incendio</td><td>0.58</td><td>Separa fuerte vs dias sin incendio</td></tr>
+                    <tr><td>Prob media en dia sin incendio</td><td>0.10</td><td>Ratio fuego/no-fuego: 5.7×</td></tr>
+                </tbody>
+            </table>
+            <p>Las metricas reflejan honestamente lo dificil que es predecir incendios: los positivos son ~1.3% del total. Lo importante operativamente es que el modelo separa dias-muni con incendio (prob media 0.58) de dias sin incendio (prob media 0.10), un ratio de <strong>5.7×</strong>, y captura el 30% de los incendios reales en su threshold operativo.</p>
 
-            <h2>5. Factor antropogenico</h2>
+            <h3>Importancia de cada feature</h3>
+            <p>Que tanto contribuye cada variable a las predicciones del modelo:</p>
+            <div class="feat-imp">
+                <div class="feat-row"><span class="name">elevacion</span><div class="bar-wrap"><div class="bar" style="width:100%"></div></div><span class="pct">27.5%</span></div>
+                <div class="feat-row"><span class="name">lat</span><div class="bar-wrap"><div class="bar" style="width:53%"></div></div><span class="pct">14.5%</span></div>
+                <div class="feat-row"><span class="name">lon</span><div class="bar-wrap"><div class="bar" style="width:39%"></div></div><span class="pct">10.8%</span></div>
+                <div class="feat-row"><span class="name">ecoregion</span><div class="bar-wrap"><div class="bar" style="width:37%"></div></div><span class="pct">10.3%</span></div>
+                <div class="feat-row"><span class="name">dia_del_ano</span><div class="bar-wrap"><div class="bar" style="width:36%"></div></div><span class="pct">9.9%</span></div>
+                <div class="feat-row"><span class="name">mes</span><div class="bar-wrap"><div class="bar" style="width:17%"></div></div><span class="pct">4.8%</span></div>
+                <div class="feat-row"><span class="name">temp_min</span><div class="bar-wrap"><div class="bar" style="width:17%"></div></div><span class="pct">4.7%</span></div>
+                <div class="feat-row"><span class="name">dias_sin_lluvia_30d</span><div class="bar-wrap"><div class="bar" style="width:12%"></div></div><span class="pct">3.4%</span></div>
+                <div class="feat-row"><span class="name">et0</span><div class="bar-wrap"><div class="bar" style="width:12%"></div></div><span class="pct">3.3%</span></div>
+                <div class="feat-row"><span class="name">temp_max</span><div class="bar-wrap"><div class="bar" style="width:11%"></div></div><span class="pct">3.1%</span></div>
+                <div class="feat-row"><span class="name">humedad_min</span><div class="bar-wrap"><div class="bar" style="width:11%"></div></div><span class="pct">3.0%</span></div>
+                <div class="feat-row"><span class="name">viento_max</span><div class="bar-wrap"><div class="bar" style="width:8%"></div></div><span class="pct">2.1%</span></div>
+                <div class="feat-row"><span class="name">dias_sin_lluvia</span><div class="bar-wrap"><div class="bar" style="width:7%"></div></div><span class="pct">1.8%</span></div>
+                <div class="feat-row"><span class="name">precipitacion</span><div class="bar-wrap"><div class="bar" style="width:3%"></div></div><span class="pct">0.8%</span></div>
+            </div>
+            <p>Geografia (elevacion + lat + lon + ecorregion) suma <strong>63%</strong>: el modelo aprendio fuerte que sierra y altiplano son historicamente los mas criticos. Estacionalidad (mes + dia_del_año) suma <strong>14.7%</strong>: el modelo identifica que abril–mayo son los meses pico. Clima del dia (et0, temp, humedad, dias_sin_lluvia, dias_sin_lluvia_30d) suma <strong>16.3%</strong>: suficiente para diferenciar dias peligrosos de dias tranquilos en cada municipio. Esto es consistente con la realidad operativa: la geografia condiciona <em>donde</em> hay riesgo y la estacionalidad <em>cuando</em>; el clima del dia ajusta el nivel.</p>
+
+            <h2 id="m-factor">8. Factor antropogenico</h2>
             <div class="antro-box">
                 El factor antropogenico es un <strong>ajuste explicito y toggleable</strong> que se aplica encima del output de ambos modelos. Se calcula en el backend y se almacena en BD como <code>factor_antropogenico_pts</code> (0–20) y <code>factor_antropogenico_etiquetas</code>. El usuario puede desactivarlo desde el dashboard con el checkbox "Incluir factor humano" para ver el output del modelo puro.
             </div>
-            <p>La formula combina dos capas independientes:</p>
+            <p>Captura lo que los modelos puramente meteorologicos no ven: actividad humana sistemica (Semana Santa, quemas agricolas, vacaciones, residuos de cosecha, navidad). Combina dos capas independientes:</p>
 
-            <h3>5.1 Ecorregion (Vocacion Ambiental A.C.)</h3>
+            <h3>8.1 Ecorregion (Vocacion Ambiental A.C.)</h3>
             <p>Los 51 municipios se asignan a una de las 5 ecorregiones del mapa oficial de Vocacion Ambiental A.C.. La ecorregion actua como proxy del <em>comportamiento del fuego por tipo de combustible</em>: la Sierra Madre (R4) tiene carga pesada pino-encino con potencial de fuego de copa; el altiplano (R5) tiene pastoreo extensivo que favorece quemas; los llanos (R1) tienen carga baja matorral xerofilo.</p>
             <table>
                 <thead><tr><th>Ecorregion</th><th>Descripcion</th><th># Municipios</th></tr></thead>
                 <tbody>
                     <tr><td>R1 — Llanos / matorral xerofilo</td><td>Planicies y valles semiaridos, matorral espinoso tamaulipeco</td><td>33</td></tr>
-                    <tr><td>R2 — Desierto oeste</td><td>Transicion desierto chihuahuense</td><td>1</td></tr>
+                    <tr><td>R2 — Desierto oeste</td><td>Transicion desierto chihuahuense (Mina)</td><td>1</td></tr>
                     <tr><td>R3 — Piedemonte / citrica</td><td>Transicion submontana, agricultura intensiva</td><td>10</td></tr>
-                    <tr><td>R4 — Sierra Madre Oriental</td><td>Bosque templado pino-encino</td><td>3</td></tr>
-                    <tr><td>R5 — Altiplano semiarido</td><td>Pastizal y matorral de altitud</td><td>4</td></tr>
+                    <tr><td>R4 — Sierra Madre Oriental</td><td>Bosque templado pino-encino (Galeana, Iturbide, Rayones)</td><td>3</td></tr>
+                    <tr><td>R5 — Altiplano semiarido</td><td>Pastizal y matorral de altitud (Aramberri, Dr Arroyo, Gral Zaragoza, Mier y Noriega)</td><td>4</td></tr>
                 </tbody>
             </table>
 
-            <h3>5.2 Actividad humana caracteristica</h3>
+            <h3>8.2 Actividad humana caracteristica</h3>
             <p>Encima de la ecorregion, cada municipio recibe una o mas etiquetas de actividad que modulan la respuesta a cada evento calendario:</p>
             <ul>
                 <li><strong>amm_nucleo</strong> — 9 municipios del Area Metropolitana de Monterrey</li>
@@ -564,19 +816,19 @@
                 <li><strong>ganaderia_ext</strong> — ganaderia extensiva con quemas de pastoreo (Dr Arroyo, Mier y Noriega, Gral Zaragoza, Aramberri, Galeana)</li>
             </ul>
 
-            <h3>5.3 Matriz de pesos</h3>
-            <p>Pesos base por ecorregion y evento (pts):</p>
-            <table>
-                <thead><tr><th>Evento</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>R5</th></tr></thead>
+            <h3>8.3 Matriz de pesos por ecorregion y evento</h3>
+            <p>Pesos base en pts (cap 20 pts cuando se suman varios eventos):</p>
+            <table class="heat-tabla">
+                <thead><tr><th class="evento">Evento</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>R5</th></tr></thead>
                 <tbody>
-                    <tr><td>Semana Santa (±7d Viernes Santo)</td><td>4</td><td>2</td><td>6</td><td><strong>10</strong></td><td>5</td></tr>
-                    <tr><td>Quemas agricolas (15 ene – 31 may)</td><td>5</td><td>2</td><td><strong>10</strong></td><td>4</td><td><strong>8</strong></td></tr>
-                    <tr><td>Residuos cosecha (octubre)</td><td>3</td><td>1</td><td>5</td><td>2</td><td>4</td></tr>
-                    <tr><td>Vacaciones verano (jul – ago)</td><td>2</td><td>1</td><td>4</td><td><strong>8</strong></td><td>3</td></tr>
-                    <tr><td>Temporada navideña (22 dic – 6 ene)</td><td>4</td><td>3</td><td>5</td><td>5</td><td>4</td></tr>
+                    <tr><td class="evento">Semana Santa (±7d)</td><td class="heat-cell-2">4</td><td class="heat-cell-1">2</td><td class="heat-cell-3">6</td><td class="heat-cell-6">10</td><td class="heat-cell-3">5</td></tr>
+                    <tr><td class="evento">Quemas agricolas (15 ene–31 may)</td><td class="heat-cell-3">5</td><td class="heat-cell-1">2</td><td class="heat-cell-6">10</td><td class="heat-cell-2">4</td><td class="heat-cell-5">8</td></tr>
+                    <tr><td class="evento">Residuos cosecha (oct)</td><td class="heat-cell-2">3</td><td class="heat-cell-1">1</td><td class="heat-cell-3">5</td><td class="heat-cell-1">2</td><td class="heat-cell-2">4</td></tr>
+                    <tr><td class="evento">Vacaciones verano (jul–ago)</td><td class="heat-cell-1">2</td><td class="heat-cell-1">1</td><td class="heat-cell-2">4</td><td class="heat-cell-5">8</td><td class="heat-cell-2">3</td></tr>
+                    <tr><td class="evento">Temporada navideña (22 dic–6 ene)</td><td class="heat-cell-2">4</td><td class="heat-cell-2">3</td><td class="heat-cell-3">5</td><td class="heat-cell-3">5</td><td class="heat-cell-2">4</td></tr>
                 </tbody>
             </table>
-            <p>Bonos adicionales cuando la actividad del municipio aplica al evento:</p>
+            <p>Bonos adicionales por actividad cuando aplica al evento:</p>
             <table>
                 <thead><tr><th>Actividad</th><th>Eventos aplicables</th><th>+Pts</th></tr></thead>
                 <tbody>
@@ -592,25 +844,195 @@
             <p>Los pts se suman (base ecorregion + bonos de todas las actividades aplicables) y se <strong>acotan a un maximo de 20 pts</strong>. El ajuste a la probabilidad es <code>prob_ajustada = min(prob_base + pts/100, 1.0)</code>.</p>
             <p>Viernes Santo se calcula programaticamente con el algoritmo anonimo/Butcher (valido para cualquier año).</p>
 
-            <h2>6. Niveles de riesgo</h2>
+            <h2 id="m-niveles">9. Niveles de riesgo e interpretacion</h2>
             <p>La probabilidad (ajustada o base, segun el toggle) se discretiza en 5 niveles con los siguientes umbrales:</p>
             <table>
                 <thead><tr><th>Nivel</th><th>Probabilidad</th><th>Accion recomendada</th></tr></thead>
                 <tbody>
-                    <tr><td><span class="nivel-badge" style="background:var(--bajo-bg);color:var(--bajo-text)">BAJO</span></td><td>0 – 19%</td><td>Monitoreo rutinario</td></tr>
-                    <tr><td><span class="nivel-badge" style="background:var(--medio-bg);color:var(--medio-text)">MEDIO</span></td><td>20 – 39%</td><td>Preparacion de brigadas</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:var(--bajo-bg);color:var(--bajo-text)">BAJO</span></td><td>0 – 19%</td><td>Monitoreo rutinario, prevencion estructural</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:var(--medio-bg);color:var(--medio-text)">MEDIO</span></td><td>20 – 39%</td><td>Preparacion de brigadas, sensibilizacion</td></tr>
                     <tr><td><span class="nivel-badge" style="background:var(--alto-bg);color:var(--alto-text)">ALTO</span></td><td>40 – 59%</td><td>Alerta a Proteccion Civil, pre-posicionamiento de recursos</td></tr>
                     <tr><td><span class="nivel-badge" style="background:var(--muy-alto-bg);color:var(--muy-alto-text)">MUY ALTO</span></td><td>60 – 79%</td><td>Activacion de brigadas, restriccion de quemas, vigilancia aerea</td></tr>
                     <tr><td><span class="nivel-badge" style="background:var(--extremo-bg);color:var(--extremo-text)">EXTREMO</span></td><td>80 – 100%</td><td>Movilizacion interinstitucional, evacuacion preventiva si procede</td></tr>
                 </tbody>
             </table>
+            <h3>Como interpretar la probabilidad</h3>
+            <p><strong>"75% de probabilidad" no significa "75% de chance de incendio mañana"</strong>. Significa que las condiciones del dia se asemejan a las que historicamente (ERA5 + CONAFOR 2015–24) preceden a incendios reales en ese municipio. Una intuicion mas accionable:</p>
+            <ul>
+                <li><strong>BAJO–MEDIO</strong>: condiciones poco favorables. Los recursos pueden enfocarse en prevencion estructural (brechas, sensibilizacion).</li>
+                <li><strong>ALTO</strong>: condiciones favorables al fuego activamente. La accion preventiva se justifica; aun no es alarma.</li>
+                <li><strong>MUY ALTO</strong>: combinaciones que historicamente preceden a la mayoria de incendios. Postergar quemas controladas y movilizar brigadas a posicion avanzada.</li>
+                <li><strong>EXTREMO</strong>: fenomenos atmosfericos extremos coinciden con fechas/sitios criticos. Vigilancia activa y restriccion de actividad humana en el bosque.</li>
+            </ul>
+            <div class="info-box">
+                Las recomendaciones operativas detalladas por nivel se incluyen al final de cada correo a suscriptores y se pueden editar desde la BD (<code>recomendaciones_nivel</code>) sin redeploy.
+            </div>
 
-            <h2>7. Trazabilidad y reproducibilidad</h2>
-            <p>Para cada corrida del ETL y cada (municipio, fecha, modelo) la BD almacena: <code>prob_base</code>, <code>prob_incendio</code> (ajustada), <code>factor_antropogenico_pts</code>, <code>factor_antropogenico_etiquetas</code>, todos los features climaticos (<code>features_json</code>) y la version del modelo. Los hotspots conservan su deteccion original con satelite, coordenadas y FRP. El codigo fuente del ETL y este dashboard estan en un repositorio git con historial completo de cambios.</p>
+            <h2 id="m-ejemplo">10. Caso completo: Galeana, 22 abril 2026</h2>
+            <p>Recorrido detallado por todo el pipeline para un municipio real, en una fecha real. Permite verificar paso a paso como una entrada cruda llega a un correo concreto.</p>
+
+            <h3>10.1 Datos de entrada</h3>
+            <div class="ejemplo-box">
+                <h4>Catalogo del municipio</h4>
+                <div class="ejemplo-step"><span class="key">cve_muni</span><span class="val">017</span></div>
+                <div class="ejemplo-step"><span class="key">centroide INEGI</span><span class="val">24.7605°N, 100.3923°O</span></div>
+                <div class="ejemplo-step"><span class="key">elevacion</span><span class="val">2,153 m (Sierra Madre)</span></div>
+                <div class="ejemplo-step"><span class="key">ecorregion</span><span class="val">R4 (Sierra Madre Oriental)</span></div>
+                <div class="ejemplo-step"><span class="key">actividades</span><span class="val">ganaderia_ext, turismo_alto</span></div>
+            </div>
+            <div class="ejemplo-box">
+                <h4>Open-Meteo (consulta del dia)</h4>
+                <div class="ejemplo-step"><span class="key">temp_max</span><span class="val">33.5 °C</span></div>
+                <div class="ejemplo-step"><span class="key">temp_min</span><span class="val">15.2 °C</span></div>
+                <div class="ejemplo-step"><span class="key">humedad_min</span><span class="val">22 %</span></div>
+                <div class="ejemplo-step"><span class="key">viento_max</span><span class="val">24 km/h</span></div>
+                <div class="ejemplo-step"><span class="key">precipitacion</span><span class="val">0 mm</span></div>
+                <div class="ejemplo-step"><span class="key">et0</span><span class="val">4.2 mm</span></div>
+                <div class="ejemplo-step"><span class="key">dias_sin_lluvia</span><span class="val">12 dias (calculado de historico)</span></div>
+                <div class="ejemplo-step"><span class="key">dias_sin_lluvia_30d</span><span class="val">26 dias secos en ultimos 30</span></div>
+                <div class="ejemplo-step"><span class="key">n_hotspots_24h</span><span class="val">2 (VIIRS NOAA-21)</span></div>
+            </div>
+
+            <h3>10.2 Modelo de reglas</h3>
+            <div class="ejemplo-box">
+                <h4>Score por componente</h4>
+                <div class="ejemplo-step"><span class="key">dias_sin_lluvia 12</span><span class="val">25 pts (≥7d)</span></div>
+                <div class="ejemplo-step"><span class="key">temp_max 33.5°C</span><span class="val">10 pts (≥30°C)</span></div>
+                <div class="ejemplo-step"><span class="key">humedad_min 22%</span><span class="val">15 pts (≤25%)</span></div>
+                <div class="ejemplo-step"><span class="key">viento_max 24 km/h</span><span class="val">5 pts (≥15 km/h)</span></div>
+                <div class="ejemplo-step"><span class="key">n_hotspots_24h 2</span><span class="val">7 pts (≥1)</span></div>
+                <div class="ejemplo-formula">prob_base = (25 + 10 + 15 + 5 + 7) / 100 = 0.62  →  MUY ALTO</div>
+            </div>
+
+            <h3>10.3 Modelo ML (Random Forest)</h3>
+            <div class="ejemplo-box">
+                <p>Las 14 features se pasan al estimador entrenado. Por la combinacion de elevacion=2,153 m, ecorregion=4, dia_del_año=112 (abril), dias_sin_lluvia_30d=26, et0=4.2, el modelo emite:</p>
+                <div class="ejemplo-formula">prob_base_ml = 0.95</div>
+                <p style="margin-top:0.5rem">El modelo asigna probabilidad alta porque Galeana es el #1 historico en abril (18 incendios 2015–24), tiene la mayor elevacion del estado, y las condiciones de hoy se alinean con los dias-muni positivos del entrenamiento.</p>
+            </div>
+
+            <h3>10.4 Factor antropogenico</h3>
+            <div class="ejemplo-box">
+                <h4>Calculo del factor (22 abr 2026)</h4>
+                <div class="ejemplo-step"><span class="key">Semana Santa ±7d</span><span class="val">No (terminó 11 abril)</span></div>
+                <div class="ejemplo-step"><span class="key">Quemas agricolas</span><span class="val">Si — R4: 4 pts base</span></div>
+                <div class="ejemplo-step"><span class="key">+ ganaderia_ext bonus</span><span class="val">+2 pts</span></div>
+                <div class="ejemplo-step"><span class="key">Vacaciones verano</span><span class="val">No</span></div>
+                <div class="ejemplo-step"><span class="key">Navidad</span><span class="val">No</span></div>
+                <div class="ejemplo-formula">factor_antropogenico_pts = 4 + 2 = 6 pts
+etiquetas = ["Quemas agricolas"]</div>
+            </div>
+
+            <h3>10.5 Probabilidad ajustada y nivel final</h3>
+            <div class="ejemplo-box">
+                <div class="ejemplo-formula">Modelo de reglas:  prob_incendio = min(0.62 + 0.06, 1.0) = 0.68  →  MUY ALTO
+Modelo ML:         prob_incendio = min(0.95 + 0.06, 1.0) = 1.00  →  EXTREMO</div>
+                <p style="margin-top:0.5rem">Ambos numeros se almacenan en <code>predicciones</code> con sus respectivos <code>modelo_version</code>.</p>
+            </div>
+
+            <h3>10.6 Lo que llega al correo del suscriptor</h3>
+            <p>Un usuario que tenga seleccionada Galeana ve esto al inicio de su correo:</p>
+            <div class="ejemplo-box">
+                <h4>Galeana</h4>
+                <p style="margin:0 0 0.4rem 0"><strong>Condiciones climaticas:</strong> MUY ALTO (68%)</p>
+                <p style="margin:0 0 0.5rem 0"><strong>Prediccion ML:</strong> EXTREMO (100%)</p>
+                <p style="font-size:0.85rem;color:#444;line-height:1.55;margin:0">Van 12 dias sin lluvia. La vegetacion ha perdido humedad y es mas vulnerable al fuego. La temperatura es de 33.5°C, moderadamente alta. La humedad es de 22%, lo que indica un ambiente seco que favorece la ignicion. Se detectaron 2 puntos de calor por satelite en las ultimas 24h. Se agregan 6 puntos por quemas agricolas en esta temporada. Historicamente este es el municipio #1 de Nuevo Leon con mas incendios en abril (18 registrados entre 2015 y 2024).</p>
+            </div>
+
+            <h2 id="m-limitaciones">11. Limitaciones conocidas</h2>
+            <div class="warn-box">
+                Esta seccion se incluye explicitamente porque ningun sistema de prediccion es infalible. Conocer las limitaciones es prerequisito para usar el sistema con criterio operativo.
+            </div>
+            <dl class="glosario">
+                <dt>Open-Meteo es pronostico, no observacion</dt>
+                <dd>Los valores climaticos son las predicciones del modelo numerico (ICON+GFS). Pueden diferir de la observacion real, especialmente en zonas de orografia compleja como la Sierra Madre. El pronostico se actualiza 4 veces al dia y los niveles pueden cambiar entre corridas (cada correo lleva timestamp del pronostico al pie).</dd>
+
+                <dt>Class imbalance del modelo ML</dt>
+                <dd>Los incendios reales son ~1.3% de los dias-muni en 10 años. PR-AUC de 0.115 es modesto en absoluto pero ~9× la base aleatoria. El modelo identifica patrones generales pero falla en eventos atipicos: incendios fuera de la temporada usual, en municipios sin historial reciente, o causados por factores no-climaticos (cortocircuitos, sabotaje).</dd>
+
+                <dt>Latencia y resolucion de hotspots FIRMS</dt>
+                <dd>Hay un retraso tipico de 0.5–3 horas entre la deteccion satelital y la publicacion en la API. Fuegos pequeños bajo dosel forestal pueden no detectarse (resolucion VIIRS 375 m, MODIS 1 km). El sistema no sustituye a la observacion humana directa.</dd>
+
+                <dt>Factor antropogenico es heuristico</dt>
+                <dd>Los pesos por evento calendario y actividad estan basados en patrones operativos conocidos, no en aprendizaje estadistico. No capturan eventos no-calendarizados (ferias regionales, festividades patronales locales, condiciones laborales especificas).</dd>
+
+                <dt>Cobertura geografica limitada</dt>
+                <dd>El sistema esta restringido a los 51 municipios de Nuevo Leon. Incendios en estados vecinos visibles en hotspots FIRMS son descartados por el filtro point-in-polygon. Plumas de humo desde Coahuila/Tamaulipas no se modelan.</dd>
+
+                <dt>Pendiente municipal no integrada</dt>
+                <dd>La elevacion proviene de Open-Meteo (DEM ~1 km). La pendiente_media en BD esta en cero hasta que se cargue de fuente DEM oficial. Este feature podria mejorar el modelo ML en sierra.</dd>
+
+                <dt>Modelo entrenado con clima reanalisis (ERA5)</dt>
+                <dd>El entrenamiento usó Open-Meteo Archive (basado en ERA5 reanalysis). Hay diferencias menores entre el reanalisis (que asimila observaciones) y el pronostico operativo (forward run del modelo). En la practica esto introduce ruido marginal.</dd>
+
+                <dt>Posibles oscilaciones cerca de los umbrales</dt>
+                <dd>Un municipio con prob 0.79 (MUY ALTO) puede pasar a 0.81 (EXTREMO) entre corridas si Open-Meteo ajusta el pronostico. La interpretacion correcta es "cerca del umbral", no "cambio cualitativo".</dd>
+            </dl>
+
+            <h2 id="m-trazabilidad">12. Trazabilidad y reproducibilidad</h2>
+            <p>Para cada corrida del ETL y cada (municipio, fecha, modelo) la BD almacena: <code>prob_base</code>, <code>prob_incendio</code> (ajustada), <code>factor_antropogenico_pts</code>, <code>factor_antropogenico_etiquetas</code>, todos los features climaticos en <code>features_json</code> y la version del modelo. Los hotspots conservan deteccion original con satelite, coordenadas y FRP. Los correos enviados quedan registrados en <code>correos_enviados</code> con asunto, conteos y status.</p>
+            <p>El codigo fuente del ETL, el modelo entrenado (.pkl), las migraciones SQL y este dashboard estan en un repositorio git con historial completo de cambios. Cualquier prediccion historica puede recalcularse a partir de los features_json almacenados.</p>
             <p>El dashboard <strong>no aplica transformaciones a los numeros</strong>: lee y muestra directamente lo almacenado en Supabase. El checkbox "Incluir factor humano" solo alterna entre mostrar <code>prob_incendio</code> o <code>prob_base</code>, ambos ya calculados en el backend.</p>
 
-            <h2>8. Comparacion entre pestañas</h2>
-            <p><strong>Condiciones climaticas</strong> muestra el modelo de reglas (rules_v1) junto con el panel de detecciones satelitales. Es util para <em>entender por que</em> hay riesgo (que factor climatico o humano esta elevado). <strong>Prediccion ML</strong> muestra el Random Forest (ml_v1). Es util para <em>estimar la probabilidad real</em> en base a patrones historicos observados. La vista <code>v_comparativa_modelos</code> en BD permite ver ambos numeros lado a lado para cada municipio.</p>
+            <h2 id="m-comparativa">13. Posicion vs sistemas oficiales</h2>
+            <p>Este sistema usa pronostico Open-Meteo (mezcla ICON 13 km + GFS 25 km) como insumo meteorologico. El <a href="https://forestales.ujed.mx/incendios2/" target="_blank" rel="noopener">Sistema de Prediccion de CONAFOR/UJED</a> corre WRF a 7 km calibrado especificamente para condiciones de incendio en Mexico y debe consultarse como referencia oficial.</p>
+            <p>Este dashboard complementa el sistema CONAFOR aportando:</p>
+            <ul>
+                <li>Modelo ML entrenado con histórico CONAFOR 2015–2024 + ERA5, especifico para Nuevo Leon.</li>
+                <li>Factor antropogenico explicito y editable, con base en ecorregiones Vocacion Ambiental A.C. y actividad humana caracteristica.</li>
+                <li>Geocodificacion estricta point-in-polygon contra Marco Geoestadistico INEGI 2025.1.</li>
+                <li>Granularidad municipal (51 municipios) con contexto historico de cada uno.</li>
+                <li>Distribucion automatica via correo con personalizacion por usuario.</li>
+            </ul>
+            <p>Otras fuentes complementarias recomendadas:</p>
+            <ul>
+                <li><a href="https://smn.conagua.gob.mx/es/incendios-forestales-diario" target="_blank" rel="noopener">SMN Conagua — Perspectiva Meteorologica para Incendios</a> (PDF diario nacional)</li>
+                <li><a href="https://incendios.conabio.gob.mx/" target="_blank" rel="noopener">CONABIO SATIF — Sistema de Alerta Temprana de Incendios</a></li>
+                <li><a href="https://firms.modaps.eosdis.nasa.gov/map/" target="_blank" rel="noopener">NASA FIRMS Fire Map</a> (puntos de calor en tiempo casi-real)</li>
+            </ul>
+
+            <h2 id="m-glosario">14. Glosario</h2>
+            <dl class="glosario">
+                <dt>Hotspot</dt>
+                <dd>Pixel satelital que el sensor termico detecto como anomalo. No equivale a un incendio confirmado: pueden ser fuegos urbanos, plantas industriales, fallas de sensor.</dd>
+
+                <dt>NRT (Near Real-Time)</dt>
+                <dd>Procesamiento de datos satelitales en tiempo casi real, con latencia de horas. Distinto a "Standard" que tiene mejor calidad pero latencia de dias.</dd>
+
+                <dt>FRP (Fire Radiative Power)</dt>
+                <dd>Energia radiativa emitida por un hotspot, en megawatts. Indicador de intensidad del fuego.</dd>
+
+                <dt>VIIRS / MODIS</dt>
+                <dd>Sensores satelitales que detectan radiacion termica. VIIRS (375 m) tiene mejor resolucion espacial; MODIS (1 km) tiene mas pasadas diarias.</dd>
+
+                <dt>WRF</dt>
+                <dd>Weather Research and Forecasting model. Software meteorologico de codigo abierto desarrollado por NCAR. Cada agencia lo corre con su propia configuracion.</dd>
+
+                <dt>ICON / GFS / ERA5</dt>
+                <dd>ICON (DWD Alemania) y GFS (NOAA EUA) son modelos numericos de pronostico que Open-Meteo combina. ERA5 es el reanalisis europeo (ECMWF), datos historicos asimilados con observaciones.</dd>
+
+                <dt>Random Forest</dt>
+                <dd>Algoritmo de aprendizaje automatico que combina muchos arboles de decision. Util para clasificacion con datos tabulares y class imbalance moderado.</dd>
+
+                <dt>PR-AUC / ROC-AUC</dt>
+                <dd>Metricas para evaluar clasificadores binarios. ROC-AUC mide separabilidad general; PR-AUC es mas honesto cuando una clase es rara (como incendios).</dd>
+
+                <dt>Triangulo del fuego</dt>
+                <dd>Concepto operativo de combate de incendios: combustible + oxigeno + ignicion. Eliminar cualquier vertice apaga el fuego. Los modelos cuantifican los tres.</dd>
+
+                <dt>Ecorregion (Vocacion Ambiental A.C.)</dt>
+                <dd>Clasificacion del territorio segun tipo de ecosistema. Funciona como proxy del comportamiento del fuego segun el tipo de combustible vegetal.</dd>
+
+                <dt>RLS (Row-Level Security)</dt>
+                <dd>Mecanismo de Postgres/Supabase para que cada usuario solo vea/modifique las filas que le corresponden, sin codigo adicional.</dd>
+
+                <dt>ETL</dt>
+                <dd>Extract, Transform, Load. El proceso diario que descarga datos crudos, los procesa y los carga a la base de datos.</dd>
+
+                <dt>Magic Link</dt>
+                <dd>Mecanismo de login sin contraseña: el usuario pide acceso, recibe un enlace unico por correo, hace click y queda autenticado. Mas seguro que passwords debiles y mas comodo para usuarios ocasionales.</dd>
+            </dl>
+
         </div>
     </div>
 
