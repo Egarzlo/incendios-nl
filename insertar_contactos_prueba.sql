@@ -7,14 +7,14 @@
 -- Para WhatsApp sandbox de Twilio, ambos numeros deben haber enviado
 -- "join <palabra-clave>" al numero del sandbox primero.
 
--- Contacto 1: Edwin (VOCACION AMBIENTAL A.C.)
+-- Contacto 1: plantilla institucional
 INSERT INTO contactos (municipio_id, nombre, cargo, email, telefono, canal_pref, activo, notas)
 VALUES (
     NULL,  -- NULL = recibe resumen de TODOS los municipios
-    'Edwin Garza',
-    'analista',
+    'Nombre Apellido',
+    'cargo',
     'correo@ejemplo.org',
-    '+528119095477',  -- ← Pon tu numero real aqui
+    '+52XXXXXXXXXX',  -- ← Pon el numero real aqui
     'whatsapp',
     true,
     'Contacto de prueba — recibe resumen diario'

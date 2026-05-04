@@ -8,7 +8,7 @@
 -- envia correos personalizados via Mailjet.
 --
 -- Separada de la tabla contactos existente:
---   contactos    -> funcionarios SEMA pre-registrados via SQL (canal operativo)
+--   contactos    -> funcionarios institucionales pre-registrados via SQL (canal operativo)
 --   suscriptores -> publico/operativos de campo con auto-registro por email
 -- ============================================================================
 
