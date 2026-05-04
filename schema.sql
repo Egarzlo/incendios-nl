@@ -135,13 +135,17 @@ LEFT JOIN clima_diario c ON c.municipio_id = m.id AND c.fecha = r.fecha
 ORDER BY GREATEST(r.prob_incendio, COALESCE(ml.prob_incendio, 0)) DESC;
 
 -- RLS
+-- Tablas de datos publicos: lectura abierta, escritura solo service_role
 ALTER TABLE municipios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE predicciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hotspots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clima_diario ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Lectura pública municipios" ON municipios FOR SELECT USING (true);
 CREATE POLICY "Lectura pública predicciones" ON predicciones FOR SELECT USING (true);
 CREATE POLICY "Lectura pública hotspots" ON hotspots FOR SELECT USING (true);
+CREATE POLICY "Lectura pública clima_diario" ON clima_diario FOR SELECT USING (true);
 
+-- Tablas privadas: solo service_role accede a todo
 ALTER TABLE contactos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alertas_enviadas ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Solo admin contactos" ON contactos FOR ALL USING (auth.role() = 'service_role');

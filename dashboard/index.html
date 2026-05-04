@@ -1073,10 +1073,13 @@ Modelo ML:         prob_incendio = min(0.95 + 0.06, 1.0) = 1.00  →  EXTREMO</d
 
     /** Recalcula nivel desde una prob (mismo umbralado que el ETL). */
     function nivelFor(prob) {
-        if (prob >= 0.8) return 'EXTREMO';
-        if (prob >= 0.6) return 'MUY_ALTO';
-        if (prob >= 0.4) return 'ALTO';
-        if (prob >= 0.2) return 'MEDIO';
+        // Redondeo a 4 decimales para alinear con el ETL (evitar artefactos
+        // de floating point en valores limite como 0.4 / 0.6 / 0.8).
+        const p = Math.round((prob || 0) * 10000) / 10000;
+        if (p >= 0.8) return 'EXTREMO';
+        if (p >= 0.6) return 'MUY_ALTO';
+        if (p >= 0.4) return 'ALTO';
+        if (p >= 0.2) return 'MEDIO';
         return 'BAJO';
     }
 

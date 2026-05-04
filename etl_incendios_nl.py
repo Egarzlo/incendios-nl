@@ -560,10 +560,14 @@ def calcular_factor_antropogenico(cve_muni: str, fecha: date) -> tuple[int, list
 
 
 def _nivel_desde_prob(prob: float) -> str:
-    if prob >= 0.8: return "EXTREMO"
-    if prob >= 0.6: return "MUY_ALTO"
-    if prob >= 0.4: return "ALTO"
-    if prob >= 0.2: return "MEDIO"
+    # Redondeo a 4 decimales antes de comparar para evitar artefactos de
+    # floating point (ej. 0.35 + 0.05 = 0.39999999... en Python). Asi el
+    # umbral coincide con la representacion que se almacena en BD.
+    p = round(prob, 4)
+    if p >= 0.8: return "EXTREMO"
+    if p >= 0.6: return "MUY_ALTO"
+    if p >= 0.4: return "ALTO"
+    if p >= 0.2: return "MEDIO"
     return "BAJO"
 
 
