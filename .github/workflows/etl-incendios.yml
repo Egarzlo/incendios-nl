@@ -15,7 +15,9 @@ on:
 jobs:
   etl-incendios:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Margen amplio: 3 intentos x 12 min cada uno + setup. Si todos fallan
+    # algo grave esta pasando.
+    timeout-minutes: 45
 
     steps:
       - name: Checkout código
@@ -42,7 +44,13 @@ jobs:
           done
           echo "✅ Shapefile INEGI 2025.1 completo: $(ls -la data/2025_1_19_MUN/)"
 
-      - name: Ejecutar ETL de incendios
+      # Ejecuta el ETL con retry automatico ante fallos transitorios:
+      # API timeouts (Open-Meteo, FIRMS), errores de red, rate limits puntuales.
+      # El ETL es idempotente (UNIQUE constraints en BD), asi que reintentar
+      # es seguro y no duplica datos. El envio de correos vive dentro de la
+      # misma corrida, por lo que tampoco se duplica.
+      - name: Ejecutar ETL de incendios (con retry)
+        uses: nick-fields/retry@v3
         env:
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -57,7 +65,11 @@ jobs:
           MAILJET_FROM_EMAIL: ${{ secrets.MAILJET_FROM_EMAIL }}
           MAILJET_FROM_NAME: ${{ secrets.MAILJET_FROM_NAME }}
           DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
-        run: python etl_incendios_nl.py
+        with:
+          timeout_minutes: 12
+          max_attempts: 3
+          retry_wait_seconds: 120
+          command: python etl_incendios_nl.py
 
       - name: Subir log de ejecución
         if: always()
