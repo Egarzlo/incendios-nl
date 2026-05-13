@@ -475,7 +475,8 @@
         <button class="active" onclick="showSection('mapa')">Condiciones climaticas</button>
         <button onclick="showSection('ml')">Prediccion ML</button>
         <button onclick="showSection('municipios')">Municipios</button>
-        <button onclick="showSection('metodologia')">Metodologia</button>
+        <button onclick="showSection('guia')">Metodologia</button>
+        <button onclick="showSection('metodologia')" style="display:none">Metodologia (detallada)</button>
     </nav>
 
     <div class="container">
@@ -563,6 +564,105 @@
                 <input type="text" id="filter-search" placeholder="Nombre del municipio..." oninput="renderCards()"/>
             </div>
             <div class="grid" id="grid"></div>
+        </div>
+
+        <div class="section metodologia" id="sec-guia">
+            <h2 style="margin-top:0">Como interpretar los resultados</h2>
+            <p>Esta guia rapida explica los <strong>umbrales</strong> que utiliza el sistema para clasificar el riesgo de incendio en cada uno de los 51 municipios de Nuevo Leon. Cada municipio recibe diariamente una probabilidad de incendio (0–100%) que se traduce a uno de cinco niveles de alerta.</p>
+
+            <h2 id="g-niveles">Niveles de riesgo por municipio</h2>
+            <p>La probabilidad calculada para cada municipio se discretiza en 5 niveles con los siguientes rangos:</p>
+            <table>
+                <thead><tr><th>Nivel</th><th>Probabilidad</th><th>Lectura operativa</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="nivel-badge" style="background:#D8F3DC;color:#1B4332;padding:2px 8px;border-radius:4px">BAJO</span></td><td>0 – 19%</td><td>Condiciones poco favorables al fuego. Monitoreo rutinario.</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:#FFF3CD;color:#664D00;padding:2px 8px;border-radius:4px">MEDIO</span></td><td>20 – 39%</td><td>Condiciones intermedias. Preparacion de brigadas y sensibilizacion.</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:#FFE0CC;color:#7A3300;padding:2px 8px;border-radius:4px">ALTO</span></td><td>40 – 59%</td><td>Condiciones favorables al fuego. Alerta a Proteccion Civil y pre-posicionamiento de recursos.</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:#FFD6DE;color:#6B0218;padding:2px 8px;border-radius:4px">MUY ALTO</span></td><td>60 – 79%</td><td>Combinaciones que historicamente preceden incendios. Activacion de brigadas, restriccion de quemas, vigilancia.</td></tr>
+                    <tr><td><span class="nivel-badge" style="background:#4A0012;color:#FFB3C1;padding:2px 8px;border-radius:4px">EXTREMO</span></td><td>80 – 100%</td><td>Condiciones criticas. Movilizacion interinstitucional y restriccion de actividad humana en zonas forestales.</td></tr>
+                </tbody>
+            </table>
+
+            <h2 id="g-variables">Umbrales por variable climatica</h2>
+            <p>El nivel de riesgo de cada municipio se construye combinando cinco variables fisicas. Estos son los umbrales que el sistema considera relevantes para cada una:</p>
+
+            <h3>Sequedad del combustible — dias consecutivos sin lluvia</h3>
+            <p>Es el factor mas importante: sin combustible seco no hay incendio.</p>
+            <table>
+                <thead><tr><th>Dias sin lluvia</th><th>Lectura</th></tr></thead>
+                <tbody>
+                    <tr><td>&lt; 3 dias</td><td>Combustible aun humedo</td></tr>
+                    <tr><td>&#8805; 3 dias</td><td>Sequedad incipiente</td></tr>
+                    <tr><td>&#8805; 7 dias</td><td>Sequedad relevante</td></tr>
+                    <tr><td>&#8805; 14 dias</td><td>Sequedad critica — vegetacion altamente inflamable</td></tr>
+                </tbody>
+            </table>
+            <p style="font-size:0.8rem;color:var(--text-secondary)">Una lluvia se considera significativa a partir de <strong>1 mm</strong>. Lluvias menores no reinician el contador.</p>
+
+            <h3>Temperatura maxima diaria</h3>
+            <table>
+                <thead><tr><th>Temperatura</th><th>Lectura</th></tr></thead>
+                <tbody>
+                    <tr><td>&lt; 30°C</td><td>Condiciones templadas</td></tr>
+                    <tr><td>&#8805; 30°C</td><td>Calor que acelera deshidratacion de vegetacion</td></tr>
+                    <tr><td>&#8805; 35°C</td><td>Calor alto — riesgo notable</td></tr>
+                    <tr><td>&#8805; 40°C</td><td>Calor extremo</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Humedad relativa minima</h3>
+            <p>La humedad baja resta agua a la vegetacion fina (pastos, hojarasca), la principal fuente de ignicion.</p>
+            <table>
+                <thead><tr><th>Humedad minima</th><th>Lectura</th></tr></thead>
+                <tbody>
+                    <tr><td>&gt; 40%</td><td>Aire suficientemente humedo</td></tr>
+                    <tr><td>&#8804; 40%</td><td>Aire seco</td></tr>
+                    <tr><td>&#8804; 25%</td><td>Aire muy seco</td></tr>
+                    <tr><td>&#8804; 15%</td><td>Aire extremadamente seco — condicion peligrosa</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Viento maximo</h3>
+            <p>El viento no inicia incendios pero propaga los existentes y dificulta su control.</p>
+            <table>
+                <thead><tr><th>Viento maximo</th><th>Lectura</th></tr></thead>
+                <tbody>
+                    <tr><td>&lt; 15 km/h</td><td>Viento debil</td></tr>
+                    <tr><td>&#8805; 15 km/h</td><td>Viento que puede propagar fuego</td></tr>
+                    <tr><td>&#8805; 30 km/h</td><td>Viento fuerte — propagacion rapida</td></tr>
+                    <tr><td>&#8805; 50 km/h</td><td>Viento muy fuerte — combate aereo dificil</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Hotspots activos (ultimas 24 h)</h3>
+            <p>Son detecciones de calor anomalo por satelite. Confirman fuego presente en el municipio.</p>
+            <table>
+                <thead><tr><th>Hotspots 24 h</th><th>Lectura</th></tr></thead>
+                <tbody>
+                    <tr><td>0</td><td>Sin detecciones recientes</td></tr>
+                    <tr><td>&#8805; 1</td><td>Fuego presente — verificar en campo</td></tr>
+                    <tr><td>&#8805; 3</td><td>Actividad de fuego significativa</td></tr>
+                </tbody>
+            </table>
+
+            <h2 id="g-factor">Factor humano (toggle)</h2>
+            <p>En la parte superior del mapa de "Condiciones climaticas" y "Prediccion ML" hay un switch <strong>"Incluir factor humano"</strong>. Cuando esta activo, la probabilidad base se ajusta por actividad humana esperada segun calendario y caracteristicas del municipio (por ejemplo: Semana Santa, quemas agricolas estacionales, afluencia turistica en zonas serranas). Si se desactiva, se muestra solo la probabilidad derivada de condiciones fisicas.</p>
+
+            <h2 id="g-pestanas">Como leer cada pestana</h2>
+            <ul style="font-size:0.9rem;line-height:1.7">
+                <li><strong>Condiciones climaticas:</strong> nivel de riesgo derivado de variables fisicas observadas/pronosticadas. Util para entender <em>por que</em> existe el riesgo en cada municipio.</li>
+                <li><strong>Prediccion ML:</strong> nivel de riesgo estimado por un modelo estadistico entrenado con datos historicos de incendios. Util como segunda opinion: si ambas pestanas coinciden, la senal es mas robusta.</li>
+                <li><strong>Municipios:</strong> tarjeta detallada por municipio con su nivel, probabilidad, variables climaticas y hotspots recientes. Permite filtrar por nivel o buscar por nombre.</li>
+            </ul>
+
+            <h2 id="g-recomendaciones">Recomendaciones de uso</h2>
+            <ul style="font-size:0.9rem;line-height:1.7">
+                <li>Niveles <strong>BAJO/MEDIO</strong>: enfocar recursos en prevencion estructural (brechas cortafuego, sensibilizacion).</li>
+                <li>Nivel <strong>ALTO</strong>: alertar a Proteccion Civil y pre-posicionar recursos.</li>
+                <li>Nivel <strong>MUY ALTO</strong>: postergar quemas controladas y movilizar brigadas a posicion avanzada.</li>
+                <li>Nivel <strong>EXTREMO</strong>: vigilancia activa, coordinacion interinstitucional y restriccion de actividad humana en zonas forestales.</li>
+                <li>Municipios con probabilidad cercana al umbral entre niveles (ej. 0.79 vs 0.81) deben leerse como "cerca del umbral", no como cambio cualitativo entre corridas.</li>
+            </ul>
         </div>
 
         <div class="section metodologia" id="sec-metodologia">
